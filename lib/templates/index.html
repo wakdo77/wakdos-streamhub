@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamer Proxy v{{ version }}</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<link rel="icon" type="image/png" sizes="128x128" href="/static/favicon-128x128.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <!-- App CSS -->
+    <link rel="stylesheet" href="/static/css/style_terminal.css">
+</head>
+<body>
+    <h1>Streamer Proxy v{{ version }}</h1>
+    <h2>Providers:</h2>
+    <ul>
+        {% for k, v in streamers.items() %}
+        <li>
+            <h3>{{ v.provider_name }} <small>( {{ k }} )</small></h3>
+            <ul>
+                <li>Channels: {% if v.get_channels() is not none %}{{ v.get_channels()|length }}{% else%}N/A{% endif %}</li>
+            </ul>
+        </li>
+        {% endfor %}
+    </ul>    
+</body>
+</html>
