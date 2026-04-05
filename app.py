@@ -33,6 +33,7 @@ def playlist_m3u(streamer_name):
 
 @app.route("/<streamer_name>/live/<channel_id>")
 @app.route("/<streamer_name>/live/<channel_id>.m3u8")
+@app.route("/<streamer_name>/live/<channel_id>.ts")
 def live_stream(streamer_name: str, channel_id: str):
     streamer_name = streamer_name.lower()
     if streamer_name not in streamers:
@@ -87,10 +88,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Debug-Modus aktivieren",
     )
+    parser.add_argument(
+        "--ffmpeg",
+        action="store_true",
+        help="FFmpeg-Remux für Live-Streams (löst Discontinuity-Stottern)",
+    )
+    parser.add_argument(
+        "--ffmpeg-path",
+        default="ffmpeg",
+        help="Pfad zur FFmpeg-Binary (default: ffmpeg)",
+    )
     args = parser.parse_args()
 
     # configure ip, port for all streamers
-    factory.configure(debug=args.debug, ip=args.ip, port=args.port)
+    factory.configure(debug=args.debug, ip=args.ip, port=args.port, ffmpeg=args.ffmpeg, ffmpeg_path=args.ffmpeg_path)
 
     proxy_base = f"http://{args.ip}:{args.port}"
     print(f"\n{'='*60}")
@@ -104,5 +115,6 @@ if __name__ == "__main__":
         print(f"    - {proxy_base}/{streamers_name}/playlist.m3u")
         print(f"    - {proxy_base}/{streamers_name}/epg.xml")
     print(f"\n  Debug      : {args.debug}")
+    print(f"  FFmpeg     : {args.ffmpeg}")
     print(f"{'='*60}\n")
     app.run(host=args.ip, port=args.port, threaded=not args.debug, debug=args.debug)

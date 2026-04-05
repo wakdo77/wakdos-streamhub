@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import urllib.parse
 import json, base64
 import time
+import subprocess
 import threading
 from flask import Response
 import re
@@ -34,9 +35,9 @@ PLUTO_BOOT_URL = (
 )
 
 class PlutoTV(StreamerBase):
-    def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080):
+    def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080, **kwargs):
         # required init of base class (StreamerBase) to set common attributes and http session
-        super().__init__(debug=debug, ip=ip, port=port)
+        super().__init__(debug=debug, ip=ip, port=port, **kwargs)
 
         # set the provider name (used in playlist URLs and logs, needs to be unique, may change later - WIP Class / Filename is unique )
         self.provider_name = "PlutoTV"
@@ -331,7 +332,113 @@ class PlutoTV(StreamerBase):
         # Fallback für Python 3.11+
         return datetime.fromisoformat(iso_str.replace("Z", "+00:00")).strftime("%Y%m%d%H%M%S +0000")
 
-    # -------------------------------------------------
+    def _live_stream_hls(self, channel_id: str):
+        """Standard HLS passthrough: rewrites playlist URLs, player handles segments directly."""
+        master_url = self._master_url(channel_id)
+        self.log(f"[HLS] Fetching master playlist for channel:{channel_id}")
+        resp = self.http.get(master_url)
+        if not resp.ok:
+            self.print(f"[HLS] Master error {resp.status_code} for {channel_id}")
+            return None
+
+        best = self._parse_best_variant(resp.text)
+        if not best:
+            self.print(f"[HLS] No variants found for {channel_id}")
+            return None
+
+        v_url  = self._variant_url(channel_id, best["uri"])
+        v_resp = self.http.get(v_url)
+        if not v_resp.ok:
+            self.print(f"[HLS] Variant error {v_resp.status_code} ({best['bandwidth']} bps)")
+            return None
+
+        # Fallback: some channels need the 'livestitch' endpoint
+        has_segments = any(
+            l.strip() and not l.strip().startswith("#")
+            for l in v_resp.text.splitlines()
+        )
+        if not has_segments:
+            self.print(f"[HLS] Empty playlist - trying livestitch fallback for '{channel_id}' ...")
+            ls_url  = self._variant_url(channel_id + "livestitch", best["uri"])
+            ls_resp = self.http.get(ls_url)
+            if ls_resp.ok and any(
+                l.strip() and not l.strip().startswith("#")
+                for l in ls_resp.text.splitlines()
+            ):
+                self.print(f"[HLS] livestitch fallback successful for '{channel_id}'")
+                v_url, v_resp = ls_url, ls_resp
+
+        content = self._make_segments_absolute(v_resp.text, v_url)
+        return Response(content, mimetype="application/vnd.apple.mpegurl")
+
+    def _live_stream_ffmpeg(self, channel_id: str):
+        """FFmpeg remux: handles HLS decryption + discontinuities, outputs clean MPEG-TS."""
+        variant_url = self._resolve_variant_url(channel_id)
+        if not variant_url:
+            return None
+
+        self.print(f"[FFmpeg] Starting stream for channel:{channel_id}")
+
+        cmd = [
+            self.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
+            "-user_agent", self.USER_AGENT,
+            "-headers", f"Authorization: Bearer {self.jwt_token}\r\n",
+            "-i", variant_url,
+            "-c", "copy",
+            "-f", "mpegts",
+            "pipe:1",
+        ]
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        def generate():
+            try:
+                while True:
+                    chunk = process.stdout.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                err = process.stderr.read().decode(errors="replace").strip()
+                if err:
+                    self.print(f"[FFmpeg] stderr: {err}")
+                process.kill()
+                process.wait()
+
+        return Response(generate(), mimetype="video/MP2T")
+
+
+    def _resolve_variant_url(self, channel_id: str) -> str | None:
+        """Resolves the best working variant URL for a channel (incl. livestitch fallback)."""
+        master_url = self._master_url(channel_id)
+        resp = self.http.get(master_url)
+        if not resp.ok:
+            self.print(f"[Resolve] Master error {resp.status_code} for {channel_id}")
+            return None
+
+        best = self._parse_best_variant(resp.text)
+        if not best:
+            self.print(f"[Resolve] No variants found for {channel_id}")
+            return None
+
+        v_url  = self._variant_url(channel_id, best["uri"])
+        v_resp = self.http.get(v_url)
+        if v_resp.ok and any(l.strip() and not l.strip().startswith("#") for l in v_resp.text.splitlines()):
+            return v_url
+
+        # Livestitch fallback
+        ls_url  = self._variant_url(channel_id + "livestitch", best["uri"])
+        ls_resp = self.http.get(ls_url)
+        if ls_resp.ok and any(l.strip() and not l.strip().startswith("#") for l in ls_resp.text.splitlines()):
+            self.print(f"[Resolve] Using livestitch fallback for '{channel_id}'")
+            return ls_url
+
+        self.print(f"[Resolve] No working variant found for {channel_id}")
+        return None
+
+
+
+    # -------------------------------------------------------------------------------------------------------------------------------------------------
     # abstract method implementations    
 
     def boot(self):
@@ -356,59 +463,20 @@ class PlutoTV(StreamerBase):
 
     def live_stream(self, channel_id: str):
         self._ensure_valid()
-        master_url = self._master_url(channel_id)
-        self.log(f"[Proxy] Hole Master-Playlist für Kanal:{channel_id}")
-        resp  = self.http.get(master_url)
-        if not resp.ok:
-            self.print(f"[Proxy] Master-Fehler {resp.status_code} für {channel_id}")
-            return None
-
-        # 2. Beste Variante wählen
-        best = self._parse_best_variant(resp.text)
-        if not best:
-            self.print(f"[Proxy] Keine Varianten gefunden für {channel_id}")
-            return None
-        
-        # 3. Varianten-Playlist fetchen
-        v_url  = self._variant_url(channel_id, best["uri"])
-        v_resp = self.http.get(v_url)
-        if not v_resp.ok:
-            print(f"[Proxy] Varianten-Fehler {v_resp.status_code} ({best['bandwidth']} bps)")
-            return None
-        
-        # Fallback: leere Playlist (nur #EXT-X-ENDLIST, keine Segmente) →
-        # Manche Kanäle benötigen den 'livestitch'-Endpunkt statt des Standard-Endpunkts.
-        has_segments = any(
-            l.strip() and not l.strip().startswith("#")
-            for l in v_resp.text.splitlines()
-        )
-        if not has_segments:
-            self.print(f"[Proxy] Leere Playlist - versuche livestitch-Fallback für '{channel_id}' ...")
-            ls_id   = channel_id + "livestitch"
-            ls_url  = self._variant_url(ls_id, best["uri"])
-            ls_resp = self.http.get(ls_url)
-            if ls_resp.ok and any(
-                l.strip() and not l.strip().startswith("#")
-                for l in ls_resp.text.splitlines()
-            ):
-                self.print(f"[Proxy] livestitch-Fallback erfolgreich für '{channel_id}'")
-                v_url, v_resp = ls_url, ls_resp
-        # 4.
-        content = self._make_segments_absolute(v_resp.text, v_url)
-        return Response(content, mimetype="application/vnd.apple.mpegurl") 
+        if self.ffmpeg:
+            return self._live_stream_ffmpeg(channel_id)
+        return self._live_stream_hls(channel_id)
                 
     def vod_stream(self, vod_id: str): ...
     
-    def playlist_m3u(self, extension: str = "m3u8") -> str:
+    def playlist_m3u(self) -> str:
         """
         M3U-Playlist aller PlutoTV-Kanäle.
         Kompatibel mit VLC, Kodi IPTV Simple Client und Enigma2.
-
-        base_url: Basis-URL für die Stream-Links (z.B. http://localhost:8080) ohne abschließenden Slash.
-        extension: Dateiendung für die Stream-Links (standardmäßig "m3u8", kann aber z.B. "m3u" sein wenn der Player das besser mag).
-        e.g. für VLC: [http://localhost:8080]/live/69776b58036e883f39e5ab8a[.m3u8]
+        Extension: .ts bei FFmpeg-Modus (MPEG-TS), sonst .m3u8 (HLS).
         """
         self._ensure_valid()
+        extension = "ts" if self.ffmpeg else "m3u8"
 
         lines = ["#EXTM3U"]
         for ch in self.channels:
@@ -424,7 +492,7 @@ class PlutoTV(StreamerBase):
                 f'tvg-logo="{logo}" tvg-chno="{number}" '
                 f'group-title="{category}",{name}'
             )
-            base_url = self.get_proxy_base_url()    
+            base_url = self.get_proxy_base_url()
             lines.append(f"{base_url}/live/{ch_id}.{extension}")
 
         return Response("\n".join(lines))

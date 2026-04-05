@@ -3,9 +3,11 @@ import requests
 from datetime import datetime
 
 class StreamerBase(ABC):
-    def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080, active: bool = True, **kwargs):
+    def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080, active: bool = True, ffmpeg: bool = False, ffmpeg_path: str = "ffmpeg", **kwargs):
         self.active         = active
         self.debug          = debug
+        self.ffmpeg         = ffmpeg
+        self.ffmpeg_path    = ffmpeg_path
         self.ip             = ip
         self.port           = port
         self.provider_name  = "NA" # Muss von ableitender Kalsse gesetzt werden
