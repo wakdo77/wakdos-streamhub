@@ -32,14 +32,16 @@ def playlist_m3u(streamer_name):
     return get_streamer(streamer_name).playlist_m3u()
 
 @app.route("/<streamer_name>/live/<channel_id>")
-@app.route("/<streamer_name>/live/<channel_id>.m3u8")
-@app.route("/<streamer_name>/live/<channel_id>.ts")
-def live_stream(streamer_name: str, channel_id: str):
+@app.route("/<streamer_name>/live/<channel_id>.<ext>")
+def live_stream(streamer_name: str, channel_id: str, ext: str = "m3u8"):
     streamer_name = streamer_name.lower()
     if streamer_name not in streamers:
         abort(404, description=f"Streamer {streamer_name} nicht gefunden. Verfügbare Streamer: {', '.join(streamers)}")
     
-    return get_streamer(streamer_name).live_stream(channel_id=channel_id)
+    streamer = get_streamer(streamer_name)
+    if ext == "ts" and streamer.ffmpeg:
+        return streamer._live_stream_ffmpeg(channel_id)
+    return streamer._live_stream_hls(channel_id)
 
 @app.route("/<streamer_name>/vod/<vod_id>")
 @app.route("/<streamer_name>/vod/<vod_id>.m3u8")

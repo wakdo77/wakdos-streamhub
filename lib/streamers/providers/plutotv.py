@@ -198,10 +198,10 @@ class PlutoTV(StreamerBase):
         for line in playlist_content.splitlines():
             clean = line.strip()
 
-            # #EXT-X-ENDLIST herausfiltern: PlutoTV sendet zwischen Sendungen eine leere
-            # Playlist mit diesem Tag, was Kodi den Stream stoppen lässt.
-            # if clean == "#EXT-X-ENDLIST":
-            #     continue
+            # #EXT-X-ENDLIST herausfiltern: PlutoTV sendet diesen Tag an Sendungsgrenzen.
+            # Das signalisiert "Stream ist zu Ende" und stoppt sowohl Kodi als auch FFmpeg.
+            if clean == "#EXT-X-ENDLIST":
+                continue
 
             # Segment-Zeilen: nicht leer, kein '#'
             if clean and not clean.startswith("#"):
@@ -381,6 +381,9 @@ class PlutoTV(StreamerBase):
 
         cmd = [
             self.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "5",
             "-user_agent", self.USER_AGENT,
             "-headers", f"Authorization: Bearer {self.jwt_token}\r\n",
             "-i", variant_url,
@@ -463,8 +466,6 @@ class PlutoTV(StreamerBase):
 
     def live_stream(self, channel_id: str):
         self._ensure_valid()
-        if self.ffmpeg:
-            return self._live_stream_ffmpeg(channel_id)
         return self._live_stream_hls(channel_id)
                 
     def vod_stream(self, vod_id: str): ...
