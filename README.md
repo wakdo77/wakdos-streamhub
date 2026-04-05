@@ -12,6 +12,7 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 - **M3U Playlists** – Ready-to-use playlists compatible with IPTV Simple Client, VLC, and Enigma2
 - **XMLTV EPG** – Electronic program guide in standard XMLTV format
 - **Live Streaming** – HLS proxy with automatic quality selection (best available)
+- **FFmpeg Remux** – Optional MPEG-TS passthrough via FFmpeg for stutter-free playback (handles HLS discontinuities, AES decryption)
 - **Modular Providers** – Each streaming service is a self-contained plugin
 - **Easy to Extend** – Drop in a new provider file and it's auto-discovered
 
@@ -33,8 +34,11 @@ python -m venv venv
 venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 
-# Run
+# Run (standard HLS mode)
 python app.py --ip 0.0.0.0 --port 7080
+
+# Run with FFmpeg remux (stutter-free, requires ffmpeg)
+python app.py --ip 0.0.0.0 --port 7080 --ffmpeg
 ```
 
 Then point your player at:
@@ -43,11 +47,13 @@ Then point your player at:
 
 ### CLI Options
 
-| Option    | Default     | Description                       |
-|-----------|-------------|-----------------------------------|
-| `--ip`    | `localhost` | Bind address and playlist URL host |
-| `--port`  | `7080`      | Port                              |
-| `--debug` | `false`     | Enable debug logging              |
+| Option          | Default     | Description                              |
+|-----------------|-------------|------------------------------------------|
+| `--ip`          | `localhost` | Bind address and playlist URL host       |
+| `--port`        | `7080`      | Port                                     |
+| `--debug`       | `false`     | Enable debug logging                     |
+| `--ffmpeg`      | `false`     | FFmpeg remux for stutter-free streams    |
+| `--ffmpeg-path` | `ffmpeg`    | Path to FFmpeg binary                    |
 
 ## API Endpoints
 
@@ -56,7 +62,7 @@ All endpoints follow the pattern `/<provider>/...`:
 | Endpoint                        | Description              |
 |---------------------------------|--------------------------|
 | `GET /<provider>/playlist.m3u`  | M3U playlist (all channels) |
-| `GET /<provider>/live/<id>`     | HLS live stream          |
+| `GET /<provider>/live/<id>`     | HLS live stream (or MPEG-TS with `--ffmpeg`) |
 | `GET /<provider>/epg.xml`       | XMLTV EPG feed           |
 | `GET /<provider>/categories/`   | VOD categories (JSON)    |
 | `GET /<provider>/vod/<id>`      | VOD stream               |
@@ -88,6 +94,7 @@ lib/
 
 - Python 3.10+
 - Flask, requests (see `requirements.txt`)
+- FFmpeg (optional, for `--ffmpeg` mode)
 - Provider-specific dependencies are listed in separate `*.requirements.txt` files
 
 ## License
