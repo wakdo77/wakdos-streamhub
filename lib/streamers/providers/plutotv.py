@@ -5,6 +5,7 @@ import json, base64
 import time
 import subprocess
 import threading
+import uuid
 from flask import Response
 import re
 from html import escape as _xe
@@ -22,7 +23,7 @@ PLUTO_BOOT_URL = (
     "&deviceModel=web"
     "&deviceMake=chrome"
     "&deviceType=web"
-    "&clientID=35f42d5d-9c81-4748-bc09-d2894ae4e66f"
+    "&clientID={cid}"
     "&clientModelNumber=1.0.0"
     "&channelID="
     "&serverSideAds=false"
@@ -449,7 +450,7 @@ class PlutoTV(StreamerBase):
         now_utc = datetime.now(timezone.utc)
         launch_date = now_utc.isoformat(timespec='seconds').replace('+00:00', 'Z')
 
-        url = PLUTO_BOOT_URL.format(dt=urllib.parse.quote(launch_date))
+        url = PLUTO_BOOT_URL.format(dt=urllib.parse.quote(launch_date), cid=uuid.uuid4())
         response = self.http.get(url)
         if response.status_code == 200:
             data = response.json()
