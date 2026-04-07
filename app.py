@@ -6,7 +6,7 @@ from lib.streamers.factory import all_streamer_classes, get_streamer, all_stream
 
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.6.0"
+__version__ = "0.6.1" # first steps in ffmpeg implementation, need to bump
 
 
 # Flask-App initialisieren
@@ -82,8 +82,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--port",
         type=int,
-        default=7080,
-        help="Port der Flask-App (default: 7080)",
+        default=7000,
+        help="Port der Flask-App (default: 7000)",
     )
     parser.add_argument(
         "--debug",

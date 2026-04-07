@@ -52,6 +52,12 @@ class StreamerBase(ABC):
     @abstractmethod
     def get_channels(self): str: ...
 
+    @abstractmethod
+    def _live_stream_ffmpeg(self, channel_id: str): ...
+
+    @abstractmethod
+    def _live_stream_hls(self, channel_id: str): ...
+
     """ WIP - Implementation later - and optional """
     """
     @abstractmethod

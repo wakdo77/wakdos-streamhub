@@ -1,4 +1,4 @@
-# wakdos-streamhub
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.1-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
@@ -35,22 +35,22 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 
 # Run (standard HLS mode)
-python app.py --ip 0.0.0.0 --port 7080
+python app.py --ip 0.0.0.0 --port 7000
 
 # Run with FFmpeg remux (stutter-free, requires ffmpeg)
-python app.py --ip 0.0.0.0 --port 7080 --ffmpeg
+python app.py --ip 0.0.0.0 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
 ```
 
 Then point your player at:
-- **Playlist:** `http://<ip>:7080/plutotv/playlist.m3u`
-- **EPG:** `http://<ip>:7080/plutotv/epg.xml`
+- **Playlist:** `http://<ip>:7000/plutotv/playlist.m3u`
+- **EPG:** `http://<ip>:7000/plutotv/epg.xml`
 
 ### CLI Options
 
 | Option          | Default     | Description                              |
 |-----------------|-------------|------------------------------------------|
 | `--ip`          | `localhost` | Bind address and playlist URL host       |
-| `--port`        | `7080`      | Port                                     |
+| `--port`        | `7000`      | Port                                     |
 | `--debug`       | `false`     | Enable debug logging                     |
 | `--ffmpeg`      | `false`     | FFmpeg remux for stutter-free streams    |
 | `--ffmpeg-path` | `ffmpeg`    | Path to FFmpeg binary                    |
@@ -85,7 +85,8 @@ lib/
 │   ├── factory.py              # Auto-discovery & singleton registry
 │   └── providers/              # One file per streaming service
 ├── utils/
-│   └── ttlcache.py             # Generic TTL cache
+│   ├── ttlcache.py             # Generic TTL cache
+│   └── ffmpegwrapper.py        # Wrapper for future implementations
 ├── static/                     # Web UI assets
 └── templates/                  # Jinja2 templates
 ```

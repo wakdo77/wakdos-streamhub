@@ -3,13 +3,13 @@ from datetime import datetime, timezone, timedelta
 import urllib.parse
 import json, base64
 import time
-import subprocess
 import threading
 import uuid
 from flask import Response
 import re
 from html import escape as _xe
 from lib.utils.ttlcache import TTLCache
+from lib.utils.ffmpegwrapper import FFmpegWrapper
 
 PLUTO_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 PLUTO_EPG_DURATION_MIN  = 720   # Minuten EPG-Dauer pro Request (kann je nach Bedarf angepasst werden)
@@ -68,19 +68,20 @@ class PlutoTV(StreamerBase):
         self._epg_cache = TTLCache[str](ttl_minutes=360)
 
         # CHANNELS
-        # Cache: 120 Minuten (kann je nach Bedarf angepasst werden, z.B. 60 oder 180 Minuten)
+        # Cache: 120 Minuten
         self._channels_cache = TTLCache[str](ttl_minutes=120)
 
     # -------------------------------------------------
     # helper functions
 
     def _load_channels(self):
+        self._ensure_valid()
+
         """Lädt alle verfügbaren Kanäle vom Channels-API-Server."""
         if not self.servers["channels"]:
             self.print("Kein Channels-Server gefunden.")
             return
         
-        self._ensure_valid()
         url = (
             self.servers["channels"]
             + "/v2/guide/channels?channelIds=&offset=0&limit=1000&sort=number%3Aasc"
@@ -204,6 +205,11 @@ class PlutoTV(StreamerBase):
             if clean == "#EXT-X-ENDLIST":
                 continue
 
+            # #EXT-X-DISCONTINUITY herausfiltern: verhindert dass FFmpeg bei
+            # Werbewechseln einen neuen Video-Stream erkennt und das Bild einfriert.
+            if clean == "#EXT-X-DISCONTINUITY":
+                continue
+
             # Segment-Zeilen: nicht leer, kein '#'
             if clean and not clean.startswith("#"):
                 if not clean.startswith("http"):
@@ -250,7 +256,7 @@ class PlutoTV(StreamerBase):
                     timelines_by_channel[ch_id] = item.get("timelines", [])
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            '<tv generator-info-name="plutotv-proxy">',
+            f'<tv generator-info-name="{self.provider_name}">',
         ]
         
         # <channel>-Einträge
@@ -334,6 +340,8 @@ class PlutoTV(StreamerBase):
         return datetime.fromisoformat(iso_str.replace("Z", "+00:00")).strftime("%Y%m%d%H%M%S +0000")
 
     def _live_stream_hls(self, channel_id: str):
+        self._ensure_valid()
+
         """Standard HLS passthrough: rewrites playlist URLs, player handles segments directly."""
         master_url = self._master_url(channel_id)
         self.log(f"[HLS] Fetching master playlist for channel:{channel_id}")
@@ -374,8 +382,13 @@ class PlutoTV(StreamerBase):
 
     def _live_stream_ffmpeg(self, channel_id: str):
         """FFmpeg remux: handles HLS decryption + discontinuities, outputs clean MPEG-TS."""
-        variant_url = self._resolve_variant_url(channel_id)
+        self._ensure_valid()
+
+        #variant_url = self._resolve_variant_url(channel_id)
+        variant_url = f"http://127.0.0.1:{self.port}/{self.provider_name.lower()}/live/{channel_id}.m3u8"
+
         if not variant_url:
+            self.print("[FFmpeg] Can't find a variant. No stream for you today, buddy!")
             return None
 
         self.print(f"[FFmpeg] Starting stream for channel:{channel_id}")
@@ -384,32 +397,20 @@ class PlutoTV(StreamerBase):
             self.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
             "-reconnect", "1",
             "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
+            "-reconnect_delay_max", "10",
             "-user_agent", self.USER_AGENT,
             "-headers", f"Authorization: Bearer {self.jwt_token}\r\n",
             "-i", variant_url,
+            "-map", "0:v:0?", "-map", "0:a:0?",
+            "-fflags", "+genpts",
             "-c", "copy",
             "-f", "mpegts",
             "pipe:1",
         ]
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        def generate():
-            try:
-                while True:
-                    chunk = process.stdout.read(8192)
-                    if not chunk:
-                        break
-                    yield chunk
-            finally:
-                err = process.stderr.read().decode(errors="replace").strip()
-                if err:
-                    self.print(f"[FFmpeg] stderr: {err}")
-                process.kill()
-                process.wait()
-
-        return Response(generate(), mimetype="video/MP2T")
+        ffmpeg = FFmpegWrapper(cmd=cmd, name=f"PlutoTV-{channel_id}", logger=self.print)
+        ffmpeg.start()
+        return Response(ffmpeg.read_stdout(), mimetype="video/MP2T")
 
 
     def _resolve_variant_url(self, channel_id: str) -> str | None:
