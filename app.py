@@ -91,6 +91,11 @@ if __name__ == "__main__":
         help="Debug-Modus aktivieren",
     )
     parser.add_argument(
+        "--flaskdebug",
+        action="store_true",
+        help="Debug-Modus für Flask aktivieren",
+    )
+    parser.add_argument(
         "--ffmpeg",
         action="store_true",
         help="FFmpeg-Remux für Live-Streams (löst Discontinuity-Stottern)",
@@ -119,4 +124,4 @@ if __name__ == "__main__":
     print(f"\n  Debug      : {args.debug}")
     print(f"  FFmpeg     : {args.ffmpeg}")
     print(f"{'='*60}\n")
-    app.run(host=args.ip, port=args.port, threaded=not args.debug, debug=args.debug)
+    app.run(host=args.ip, port=args.port, threaded=not args.flaskdebug, debug=args.flaskdebug)

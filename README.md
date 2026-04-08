@@ -12,7 +12,7 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 - **M3U Playlists** – Ready-to-use playlists compatible with IPTV Simple Client, VLC, and Enigma2
 - **XMLTV EPG** – Electronic program guide in standard XMLTV format
 - **Live Streaming** – HLS proxy with automatic quality selection (best available)
-- **FFmpeg Remux** – Optional MPEG-TS passthrough via FFmpeg for stutter-free playback (handles HLS discontinuities, AES decryption)
+- **FFmpeg Remux** – Optional MPEG-TS passthrough via FFmpeg (experimental – see known issues below)
 - **Modular Providers** – Each streaming service is a self-contained plugin
 - **Easy to Extend** – Drop in a new provider file and it's auto-discovered
 
@@ -21,8 +21,8 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 | Provider | Status | DRM | Notes |
 |----------|--------|-----|-------|
 | PlutoTV  | ✅ Working | None | Free, anonymous, HLS |
-| Zattoo   | 🔜 Planned | None | Login-based, FAST channels |
-| Joyn     | 🔜 Planned | Widevine L3 | First DRM test case |
+| ??????   | 🔜 Planned | None | Login-based, FAST channels |
+| ??????   | 🔜 Planned | Widevine L3 | First DRM test case |
 
 ## Quick Start
 
@@ -97,6 +97,13 @@ lib/
 - Flask, requests (see `requirements.txt`)
 - FFmpeg (optional, for `--ffmpeg` mode)
 - Provider-specific dependencies are listed in separate `*.requirements.txt` files
+
+## Known Issues
+
+**`--ffmpeg` mode (experimental):**
+- Video freezes at ad/content transitions due to codec parameter changes between segments
+- May leave zombie FFmpeg processes on disconnect (especially on Windows)
+- HLS mode (default, without `--ffmpeg`) is currently more stable and recommended
 
 ## License
 

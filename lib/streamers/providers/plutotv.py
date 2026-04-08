@@ -71,6 +71,7 @@ class PlutoTV(StreamerBase):
         # Cache: 120 Minuten
         self._channels_cache = TTLCache[str](ttl_minutes=120)
 
+
     # -------------------------------------------------
     # helper functions
 
@@ -200,17 +201,12 @@ class PlutoTV(StreamerBase):
         for line in playlist_content.splitlines():
             clean = line.strip()
 
-            # #EXT-X-ENDLIST herausfiltern: PlutoTV sendet diesen Tag an Sendungsgrenzen.
-            # Das signalisiert "Stream ist zu Ende" und stoppt sowohl Kodi als auch FFmpeg.
+            # #EXT-X-ENDLIST: PlutoTV sends this at show boundaries, causing players to stop
             if clean == "#EXT-X-ENDLIST":
+                self.print("[HLS] #EXT-X-ENDLIST filtered")
                 continue
 
-            # #EXT-X-DISCONTINUITY herausfiltern: verhindert dass FFmpeg bei
-            # Werbewechseln einen neuen Video-Stream erkennt und das Bild einfriert.
-            if clean == "#EXT-X-DISCONTINUITY":
-                continue
-
-            # Segment-Zeilen: nicht leer, kein '#'
+            # Segment URLs: make absolute
             if clean and not clean.startswith("#"):
                 if not clean.startswith("http"):
                     clean = urllib.parse.urljoin(base, clean)
@@ -218,7 +214,9 @@ class PlutoTV(StreamerBase):
             else:
                 result.append(line.rstrip("\r"))
 
-        return "\n".join(result)
+        output = "\n".join(result)
+        self.log(f"[HLS] Playlist ({len(result)} lines):\n{output}")
+        return output
 
     def _fetch_epg_batch(self, channel_ids: list[str]) -> dict:
         """Holt EPG-Timelines für einen Batch von Kanal-IDs vom PlutoTV-API."""
@@ -401,8 +399,6 @@ class PlutoTV(StreamerBase):
             "-user_agent", self.USER_AGENT,
             "-headers", f"Authorization: Bearer {self.jwt_token}\r\n",
             "-i", variant_url,
-            "-map", "0:v:0?", "-map", "0:a:0?",
-            "-fflags", "+genpts",
             "-c", "copy",
             "-f", "mpegts",
             "pipe:1",
