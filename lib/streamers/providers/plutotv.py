@@ -396,6 +396,7 @@ class PlutoTV(StreamerBase):
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", "10",
+            "-rw_timeout", "5000000",
             "-user_agent", self.USER_AGENT,
             "-headers", f"Authorization: Bearer {self.jwt_token}\r\n",
             "-i", variant_url,
@@ -406,7 +407,17 @@ class PlutoTV(StreamerBase):
 
         ffmpeg = FFmpegWrapper(cmd=cmd, name=f"PlutoTV-{channel_id}", logger=self.print)
         ffmpeg.start()
-        return Response(ffmpeg.read_stdout(), mimetype="video/MP2T")
+
+        def generate():
+            try:
+                for chunk in ffmpeg.read_stdout(8192):
+                    yield chunk # hier knallt es, wenn Kodi weg ist
+            except OSError as e:
+                self.print(f"[FFmpeg] Client disconnected for {channel_id}: {e}")
+            finally:
+                ffmpeg.stop()
+        #return Response(ffmpeg.read_stdout(), mimetype="video/MP2T")
+        return Response(generate(), mimetype="video/MP2T", direct_passthrough=True)
 
 
     def _resolve_variant_url(self, channel_id: str) -> str | None:

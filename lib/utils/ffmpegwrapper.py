@@ -4,6 +4,7 @@ import subprocess
 import threading
 import sys
 from typing import Iterable, Optional
+import time
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -15,6 +16,7 @@ class FFmpegWrapper:
         self.proc: Optional[subprocess.Popen] = None
         self._stderr_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        self._last_read_at = time.time()
 
     def start(self) -> None:
         with self._lock:
@@ -42,6 +44,7 @@ class FFmpegWrapper:
                     daemon=True,
                 )
                 self._stderr_thread.start()
+                self.start_watchdog()
 
     def _log_stderr(self) -> None:
         assert self.proc is not None and self.proc.stderr is not None
@@ -60,6 +63,7 @@ class FFmpegWrapper:
                 chunk = self.proc.stdout.read(chunk_size)
                 if not chunk:
                     break
+                self.last_read_at = time.time()
                 yield chunk
         finally:
             self.stop()
@@ -106,16 +110,15 @@ class FFmpegWrapper:
 
             self.proc = None
 
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self.stop()
-        return False
-
-    def __del__(self):
-        self.stop()
+    def start_watchdog(self, idle_timeout=15):
+        def _watch():
+            while self.running:
+                if time.time() - self._last_read_at > idle_timeout:
+                    self.logger(f"[{self.name}] idle timeout reached, stopping")
+                    self.stop()
+                    break
+                time.sleep(1)
+        threading.Thread(target=_watch, daemon=True).start()
 
     @property
     def running(self) -> bool:

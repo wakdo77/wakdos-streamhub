@@ -47,25 +47,26 @@ Then point your player at:
 
 ### CLI Options
 
-| Option          | Default     | Description                              |
-|-----------------|-------------|------------------------------------------|
-| `--ip`          | `localhost` | Bind address and playlist URL host       |
-| `--port`        | `7000`      | Port                                     |
-| `--debug`       | `false`     | Enable debug logging                     |
-| `--ffmpeg`      | `false`     | FFmpeg remux for stutter-free streams    |
-| `--ffmpeg-path` | `ffmpeg`    | Path to FFmpeg binary                    |
+| Option          | Default     | Description                                    |
+|-----------------|-------------|------------------------------------------------|
+| `--ip`          | `localhost` | Bind address and playlist URL host             |
+| `--port`        | `7000`      | Port                                           |
+| `--debug`       | `false`     | Enable debug logging                           |
+| `--ffmpeg`      | `false`     | FFmpeg remux for stutter-free streams          |
+| `--ffmpeg-path` | `ffmpeg`    | Path to FFmpeg binary                          |
+| `--flaskdebug`  | `false`     | Enable Flask-Debug                             |
 
 ## API Endpoints
 
 All endpoints follow the pattern `/<provider>/...`:
 
-| Endpoint                        | Description              |
-|---------------------------------|--------------------------|
-| `GET /<provider>/playlist.m3u`  | M3U playlist (all channels) |
+| Endpoint                        | Description                                  |
+|---------------------------------|----------------------------------------------|
+| `GET /<provider>/playlist.m3u`  | M3U playlist (all channels)                  |
 | `GET /<provider>/live/<id>`     | HLS live stream (or MPEG-TS with `--ffmpeg`) |
-| `GET /<provider>/epg.xml`       | XMLTV EPG feed           |
-| `GET /<provider>/categories/`   | VOD categories (JSON)    |
-| `GET /<provider>/vod/<id>`      | VOD stream               |
+| `GET /<provider>/epg.xml`       | XMLTV EPG feed                               |
+| `GET /<provider>/categories/`   | VOD categories (JSON)                        |
+| `GET /<provider>/vod/<id>`      | VOD stream                                   |
 
 ## Adding a Provider
 

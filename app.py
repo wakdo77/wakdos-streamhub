@@ -17,10 +17,9 @@ streamers = all_streamer_classes()
 
 @app.route("/")
 def index():
-    all_streamers = all_streamer_instances()
     return render_template("index.html", 
         version     = __version__, 
-        streamers   = all_streamers
+        streamers   = all_streamer_instances()
     )
 
 @app.route("/<streamer_name>/playlist.m3u")
