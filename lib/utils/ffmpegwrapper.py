@@ -110,7 +110,7 @@ class FFmpegWrapper:
 
             self.proc = None
 
-    def start_watchdog(self, idle_timeout=15):
+    def start_watchdog(self, idle_timeout=30):
         def _watch():
             while self.running:
                 if time.time() - self._last_read_at > idle_timeout:
