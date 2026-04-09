@@ -1,5 +1,5 @@
 import argparse
-from flask import Flask, Response, abort, render_template
+from flask import Flask, Response, abort, render_template, request
 from lib.streamers.providers.plutotv import PlutoTV  # noqa: F401 – registriert PlutoTV in der Factory
 import lib.streamers.factory as factory
 from lib.streamers.factory import all_streamer_classes, get_streamer, all_streamer_instances
@@ -32,13 +32,18 @@ def playlist_m3u(streamer_name):
 
     return get_streamer(streamer_name).playlist_m3u()
 
-@app.route("/<streamer_name>/live/<channel_id>")
-@app.route("/<streamer_name>/live/<channel_id>.<ext>")
+@app.route("/<streamer_name>/live/<channel_id>", methods=["GET", "HEAD"])
+@app.route("/<streamer_name>/live/<channel_id>.<ext>", methods=["GET", "HEAD"])
 def live_stream(streamer_name: str, channel_id: str, ext: str = "m3u8"):
     streamer_name = streamer_name.lower()
     if streamer_name not in streamers:
         abort(404, description=f"Streamer {streamer_name} nicht gefunden. Verfügbare Streamer: {', '.join(streamers)}")
-    
+
+    # HEAD request: return headers only, don't spawn FFmpeg
+    if request.method == "HEAD":
+        mimetype = "video/MP2T" if ext == "ts" else "application/vnd.apple.mpegurl"
+        return Response("", mimetype=mimetype)
+
     streamer = get_streamer(streamer_name)
     if ext == "ts" and streamer.ffmpeg:
         return streamer._live_stream_ffmpeg(channel_id, args.ffmpeg_timeout)

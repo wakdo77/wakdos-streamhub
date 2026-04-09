@@ -382,14 +382,15 @@ class PlutoTV(StreamerBase):
         """FFmpeg remux: handles HLS decryption + discontinuities, outputs clean MPEG-TS."""
         self._ensure_valid()
 
-        #variant_url = self._resolve_variant_url(channel_id)
+        #variant_url = self._resolve_variant_url(channel_id) 
+        # WIP: possibly get the master url here? instead of calling _live_stream_hls(channel_id) tp prevent multi spawning of ffmpeg making short timeout useless
         variant_url = f"http://127.0.0.1:{self.port}/{self.provider_name.lower()}/live/{channel_id}.m3u8"
 
         if not variant_url:
             self.print("[FFmpeg] Can't find a variant. No stream for you today, buddy!")
             return None
 
-        self.print(f"[FFmpeg] Starting stream for channel:{channel_id}")
+        self.print(f"[FFmpeg] Starting stream for channel: {channel_id}")
 
         cmd = [
             self.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
