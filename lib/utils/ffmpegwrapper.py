@@ -115,7 +115,7 @@ class FFmpegWrapper:
         def _watch():
             while self.running:
                 if time.time() - self._last_read_at > self.timeout:
-                    self.logger(f"[{self.name}] idle timeout reached, stopping")
+                    self.logger(f"[{self.name}] idle timeout {self.timeout} reached, stopping")
                     self.stop()
                     break
                 time.sleep(1)

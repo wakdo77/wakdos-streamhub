@@ -14,6 +14,8 @@ app = Flask("Streamer Proxy v" + __version__, static_folder="lib/static", templa
 
 # get all available streamers from lib/streamers/providers/
 streamers = all_streamer_classes()
+ffmpeg_timeout = 30
+
 
 @app.route("/")
 def index():
@@ -39,7 +41,7 @@ def live_stream(streamer_name: str, channel_id: str, ext: str = "m3u8"):
     
     streamer = get_streamer(streamer_name)
     if ext == "ts" and streamer.ffmpeg:
-        return streamer._live_stream_ffmpeg(channel_id)
+        return streamer._live_stream_ffmpeg(channel_id, args.ffmpeg_timeout)
     return streamer._live_stream_hls(channel_id)
 
 @app.route("/<streamer_name>/vod/<vod_id>")
@@ -111,6 +113,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--ffmpeg-timeout",
+        type=int,
         default="30",
         help="Watchdog Timeout for ffmpeg instances (default: 30)",
     )
@@ -119,6 +122,8 @@ if __name__ == "__main__":
 
     # configure ip, port for all streamers
     factory.configure(debug=args.debug, ip=args.ip, port=args.port, ffmpeg=args.ffmpeg, ffmpeg_path=args.ffmpeg_path)
+    # configure ffmpeg timeout
+    ffmpeg_timeout = args.ffmpeg_timeout
 
     proxy_base = f"http://{args.ip}:{args.port}"
     print(f"\n{'='*60}")

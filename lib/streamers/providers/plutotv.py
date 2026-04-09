@@ -378,7 +378,7 @@ class PlutoTV(StreamerBase):
         content = self._make_segments_absolute(v_resp.text, v_url)
         return Response(content, mimetype="application/vnd.apple.mpegurl")
 
-    def _live_stream_ffmpeg(self, channel_id: str, timeout: str = 30):
+    def _live_stream_ffmpeg(self, channel_id: str, timeout: int = 30):
         """FFmpeg remux: handles HLS decryption + discontinuities, outputs clean MPEG-TS."""
         self._ensure_valid()
 
