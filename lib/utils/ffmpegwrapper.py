@@ -64,7 +64,7 @@ class FFmpegWrapper:
                 chunk = self.proc.stdout.read(chunk_size)
                 if not chunk:
                     break
-                self.last_read_at = time.time()
+                self._last_read_at = time.time()
                 yield chunk
         finally:
             self.stop()
