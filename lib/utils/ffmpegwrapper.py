@@ -9,7 +9,7 @@ import time
 _IS_WINDOWS = sys.platform == "win32"
 
 class FFmpegWrapper:
-    def __init__(self, cmd: list[str], name: str = "FFmpeg", logger=None):
+    def __init__(self, cmd: list[str], name: str = "FFmpeg", logger=None, timeout: int = 30):
         self.cmd = cmd
         self.name = name
         self.logger = logger or (lambda msg: print(msg, file=sys.stderr))
@@ -17,6 +17,7 @@ class FFmpegWrapper:
         self._stderr_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._last_read_at = time.time()
+        self.timeout = timeout
 
     def start(self) -> None:
         with self._lock:
@@ -110,10 +111,10 @@ class FFmpegWrapper:
 
             self.proc = None
 
-    def start_watchdog(self, idle_timeout=30):
+    def start_watchdog(self):
         def _watch():
             while self.running:
-                if time.time() - self._last_read_at > idle_timeout:
+                if time.time() - self._last_read_at > self.timeout:
                     self.logger(f"[{self.name}] idle timeout reached, stopping")
                     self.stop()
                     break

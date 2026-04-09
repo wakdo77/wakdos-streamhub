@@ -79,6 +79,11 @@ if __name__ == "__main__":
         help="IP-Adresse für Playlist-URLs (default: localhost)",
     )
     parser.add_argument(
+        "--flask-ip",
+        default="0.0.0.0", # listen on all devices
+        help="IP-Adress for flask app (default: 0.0.0.0)"
+    )
+    parser.add_argument(
         "--port",
         type=int,
         default=7000,
@@ -104,6 +109,12 @@ if __name__ == "__main__":
         default="ffmpeg",
         help="Pfad zur FFmpeg-Binary (default: ffmpeg)",
     )
+    parser.add_argument(
+        "--ffmpeg-timeout",
+        default="30",
+        help="Watchdog Timeout for ffmpeg instances (default: 30)",
+    )
+
     args = parser.parse_args()
 
     # configure ip, port for all streamers
@@ -120,7 +131,9 @@ if __name__ == "__main__":
         print(f"   {streamer_cls.__name__} ({streamers_name})")
         print(f"    - {proxy_base}/{streamers_name}/playlist.m3u")
         print(f"    - {proxy_base}/{streamers_name}/epg.xml")
-    print(f"\n  Debug      : {args.debug}")
-    print(f"  FFmpeg     : {args.ffmpeg}")
+    print(f"\n  Debug           : {args.debug}")
+    print(f"  FFmpeg          : {args.ffmpeg}")
+    if args.ffmpeg:
+        print(f"  FFmpeg Timeout  : {args.ffmpeg_timeout}")
     print(f"{'='*60}\n")
-    app.run(host=args.ip, port=args.port, threaded=not args.flaskdebug, debug=args.flaskdebug)
+    app.run(host=args.flask_ip, port=args.port, threaded=not args.flaskdebug, debug=args.flaskdebug)

@@ -47,14 +47,16 @@ Then point your player at:
 
 ### CLI Options
 
-| Option          | Default     | Description                                    |
-|-----------------|-------------|------------------------------------------------|
-| `--ip`          | `localhost` | Bind address and playlist URL host             |
-| `--port`        | `7000`      | Port                                           |
-| `--debug`       | `false`     | Enable debug logging                           |
-| `--ffmpeg`      | `false`     | FFmpeg remux for stutter-free streams          |
-| `--ffmpeg-path` | `ffmpeg`    | Path to FFmpeg binary                          |
-| `--flaskdebug`  | `false`     | Enable Flask-Debug                             |
+| Option             | Default     | Description                                    |
+|--------------------|-------------|------------------------------------------------|
+| `--ip`             | `localhost` | IP for playlist URLs                           |
+| `--flask-ip`       | `0.0.0.0`  | Flask bind address (listen on all interfaces)  |
+| `--port`           | `7000`      | Port                                           |
+| `--debug`          | `false`     | Enable debug logging                           |
+| `--flaskdebug`     | `false`     | Enable Flask debug mode                        |
+| `--ffmpeg`         | `false`     | FFmpeg remux for stutter-free streams          |
+| `--ffmpeg-path`    | `ffmpeg`    | Path to FFmpeg binary                          |
+| `--ffmpeg-timeout` | `30`        | Watchdog timeout (seconds) for idle FFmpeg processes |
 
 ## API Endpoints
 
@@ -65,8 +67,8 @@ All endpoints follow the pattern `/<provider>/...`:
 | `GET /<provider>/playlist.m3u`  | M3U playlist (all channels)                  |
 | `GET /<provider>/live/<id>`     | HLS live stream (or MPEG-TS with `--ffmpeg`) |
 | `GET /<provider>/epg.xml`       | XMLTV EPG feed                               |
-| `GET /<provider>/categories/`   | VOD categories (JSON)                        |
-| `GET /<provider>/vod/<id>`      | VOD stream                                   |
+| `GET /<provider>/categories/`   | VOD categories (JSON) WIP                    |
+| `GET /<provider>/vod/<id>`      | VOD stream WIP                               |
 
 ## Adding a Provider
 
@@ -103,7 +105,7 @@ lib/
 
 **`--ffmpeg` mode (experimental):**
 - Video freezes at ad/content transitions due to codec parameter changes between segments
-- May leave zombie FFmpeg processes on disconnect (especially on Windows), probably fixed in 0.6.2
+- Watchdog (`--ffmpeg-timeout`) kills idle FFmpeg processes after timeout (default: 30s)
 - HLS mode (default, without `--ffmpeg`) is currently more stable and recommended
 
 ## License
