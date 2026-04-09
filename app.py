@@ -6,7 +6,7 @@ from lib.streamers.factory import all_streamer_classes, get_streamer, all_stream
 
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.6.1" # first steps in ffmpeg implementation, need to bump
+__version__ = "0.6.2" # ffmpeg implementation, introducing watchdog 
 
 
 # Flask-App initialisieren

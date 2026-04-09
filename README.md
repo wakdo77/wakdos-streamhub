@@ -1,4 +1,4 @@
-# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.1-blue)
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.2-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
@@ -103,9 +103,9 @@ lib/
 
 **`--ffmpeg` mode (experimental):**
 - Video freezes at ad/content transitions due to codec parameter changes between segments
-- May leave zombie FFmpeg processes on disconnect (especially on Windows)
+- May leave zombie FFmpeg processes on disconnect (especially on Windows), probably fixed in 0.6.2
 - HLS mode (default, without `--ffmpeg`) is currently more stable and recommended
 
 ## License
 
-Private project – not licensed for redistribution.
+MIT
