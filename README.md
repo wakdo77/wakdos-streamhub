@@ -1,4 +1,4 @@
-# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.5-blue)
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.6-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
@@ -45,6 +45,9 @@ python app.py --ip 192.168.178.65 --flask-ip 192.168.178.65
 
 # Run with FFmpeg remux (stutter-free, requires ffmpeg)
 python app.py --ip 192.168.178.65 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
+
+# Run with kodi m3u playlists
+python app.py --ip 192.168.178.65 --port 7000 --kodi
 ```
 
 Then point your player at:

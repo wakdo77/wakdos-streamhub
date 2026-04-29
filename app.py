@@ -6,7 +6,7 @@ from lib.streamers.factory import all_streamer_classes, get_streamer, all_stream
 
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.6.5" # finalized ffmpeg implementation 
+__version__ = "0.6.6" # ad-break stability: fix ffmpeg routing, filter #EXT-X-DISCONTINUITY, add --kodi flag 
 
 
 # Flask-App initialisieren
