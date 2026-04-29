@@ -6,7 +6,7 @@ from lib.streamers.factory import all_streamer_classes, get_streamer, all_stream
 
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.6.2" # ffmpeg implementation, introducing watchdog 
+__version__ = "0.6.5" # finalized ffmpeg implementation 
 
 
 # Flask-App initialisieren
@@ -29,6 +29,10 @@ def playlist_m3u(streamer_name):
     streamer_name = streamer_name.lower()
     if streamer_name not in streamers:
         abort(404, description=f"Streamer {streamer_name} nicht gefunden. Verfügbare Streamer: {', '.join(streamers)}")
+
+    # warning if ffmpeg and kodi playlist requested - not compatible
+    if args.kodi is True:
+        return get_streamer(streamer_name).playlist_m3u_kodi()
 
     return get_streamer(streamer_name).playlist_m3u()
 
@@ -122,6 +126,12 @@ if __name__ == "__main__":
         default="30",
         help="Watchdog Timeout for ffmpeg instances (default: 30)",
     )
+    parser.add_argument(
+        "--kodi",
+        action="store_true",
+        help="Kodi-kompatible Playlists generieren (nur für HLS-Streams, nicht mit FFmpeg-Remux)",
+        default=False,
+    )
 
     args = parser.parse_args()
 
@@ -145,5 +155,7 @@ if __name__ == "__main__":
     print(f"  FFmpeg          : {args.ffmpeg}")
     if args.ffmpeg:
         print(f"  FFmpeg Timeout  : {args.ffmpeg_timeout}")
+    if args.kodi:
+        print(f"  Kodi-Playlisten : {args.kodi} (nur ohne ffmpeg)")
     print(f"{'='*60}\n")
     app.run(host=args.flask_ip, port=args.port, threaded=not args.flaskdebug, debug=args.flaskdebug)

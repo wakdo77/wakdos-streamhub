@@ -1,4 +1,4 @@
-# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.2-blue)
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.5-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
@@ -11,8 +11,8 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 - **Unified API** – One base URL, consistent endpoints across all providers
 - **M3U Playlists** – Ready-to-use playlists compatible with IPTV Simple Client, VLC, and Enigma2
 - **XMLTV EPG** – Electronic program guide in standard XMLTV format
-- **Live Streaming** – HLS proxy with automatic quality selection (best available)
-- **FFmpeg Remux** – Optional MPEG-TS passthrough via FFmpeg (experimental – see known issues below)
+- **Live Streaming** – HLS proxy with automatic quality selection (not recommended, see known issues below)
+- **FFmpeg Remux** – Recommended: MPEG-TS passthrough via FFmpeg (see known issues below)
 - **Modular Providers** – Each streaming service is a self-contained plugin
 - **Easy to Extend** – Drop in a new provider file and it's auto-discovered
 
@@ -35,10 +35,16 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 
 # Run (standard HLS mode)
-python app.py --ip 0.0.0.0 --port 7000
+python app.py --ip 192.168.178.65 --port 7000
+
+# Default: Flask on all interfaces (0.0.0.0)
+python app.py --ip 192.168.178.65 --port 7000
+
+# Bind Flask to specific IP (default: 0.0.0.0 = all interfaces)
+python app.py --ip 192.168.178.65 --flask-ip 192.168.178.65
 
 # Run with FFmpeg remux (stutter-free, requires ffmpeg)
-python app.py --ip 0.0.0.0 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
+python app.py --ip 192.168.178.65 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
 ```
 
 Then point your player at:
@@ -57,6 +63,7 @@ Then point your player at:
 | `--ffmpeg`         | `false`     | FFmpeg remux for stutter-free streams          |
 | `--ffmpeg-path`    | `ffmpeg`    | Path to FFmpeg binary                          |
 | `--ffmpeg-timeout` | `30`        | Watchdog timeout (seconds) for idle FFmpeg processes |
+| `--kodi`           | `false`     | Generate Kodi-compatible playlist with `inputstream.adaptive` props (HLS only, incompatible with `--ffmpeg`) |
 
 ## API Endpoints
 
@@ -67,8 +74,6 @@ All endpoints follow the pattern `/<provider>/...`:
 | `GET /<provider>/playlist.m3u`  | M3U playlist (all channels)                  |
 | `GET /<provider>/live/<id>`     | HLS live stream (or MPEG-TS with `--ffmpeg`) |
 | `GET /<provider>/epg.xml`       | XMLTV EPG feed                               |
-| `GET /<provider>/categories/`   | VOD categories (JSON) WIP                    |
-| `GET /<provider>/vod/<id>`      | VOD stream WIP                               |
 
 ## Adding a Provider
 
@@ -98,16 +103,22 @@ lib/
 
 - Python 3.10+
 - Flask, requests (see `requirements.txt`)
-- FFmpeg (optional, for `--ffmpeg` mode)
+- FFmpeg (recommended, for `--ffmpeg` mode)
 - Provider-specific dependencies are listed in separate `*.requirements.txt` files
 
 ## Known Issues
 
-**`--ffmpeg` mode (experimental):**
-- Video freezes at ad/content transitions due to codec parameter changes between segments
-- Watchdog (`--ffmpeg-timeout`) kills idle FFmpeg processes after timeout (default: 30s)
-- HLS mode (default, without `--ffmpeg`) is currently more stable and recommended
+**HLS mode (default, without `--ffmpeg`):**
+- Can hang or fail around ad → next episode transitions for some providers (e.g. PlutoTV)
+- Issues are typically related to how the provider signals end-of-stream or discontinuities in the HLS playlist
 
+**`--ffmpeg` mode (recommended for PlutoTV):**
+- Requires a working `ffmpeg` binary to be installed on the host system and accessible in `PATH` or explicitly set via `--ffmpeg-path`
+- FFmpeg-based remuxing to MPEG-TS is currently more stable than plain HLS passthrough, especially around ad transitions
+- Watchdog (`--ffmpeg-timeout`) will kill idle FFmpeg processes after the configured timeout (default: 30s)
+- Remaining caveats:
+  - short stalls are still possible on very messy ad/segment transitions
+  - higher CPU usage compared to plain HLS mode
 ## License
 
 MIT

@@ -6,7 +6,8 @@ class StreamerBase(ABC):
     def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080, active: bool = True, ffmpeg: bool = False, ffmpeg_path: str = "ffmpeg", **kwargs):
         self.active         = active
         self.debug          = debug
-        self.ffmpeg         = ffmpeg
+        self.ffmpeg         = ffmpeg # Wird in playlist_m3u() verwendet, um zu entscheiden, ob der Stream über ffmpeg oder direkt über HLS bereitgestellt wird. Wenn ffmpeg=True, wird der Stream über einen lokalen ffmpeg-Prozess bereitgestellt, der den Originalstream abruft und an den Proxy weiterleitet. Wenn ffmpeg=False, wird der Originalstream direkt über HLS bereitgestellt (sofern vom Anbieter unterstützt).
+        self.kodi           = kwargs.get("kodi", False) # Nur wenn ffmpeg false ist; Wird in playlist_m3u() verwendet, um Kodi-spezifische Tags hinzuzufügen;
         self.ffmpeg_path    = ffmpeg_path
         self.ip             = ip
         self.port           = port
@@ -40,11 +41,14 @@ class StreamerBase(ABC):
     @abstractmethod
     def live_stream(self, channel_id: str): ...
 
-    @abstractmethod
-    def vod_stream(self, vod_id: str): ...
+    #@abstractmethod
+    #def vod_stream(self, vod_id: str): ...
     
     @abstractmethod
-    def playlist_m3u(self) -> str: ...
+    def playlist_m3u(self, kodi: bool = False) -> str: ...
+
+    @abstractmethod
+    def playlist_m3u_kodi(self) -> str: ...
     
     @abstractmethod
     def get_epg_xml(self) -> str: ...

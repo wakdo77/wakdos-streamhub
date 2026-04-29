@@ -206,6 +206,11 @@ class PlutoTV(StreamerBase):
                 self.print("[HLS] #EXT-X-ENDLIST filtered")
                 continue
 
+            # #EXT-X-DISCONTINUITY: marks ad break boundaries, causes VLC decoder resets
+            #if clean == "#EXT-X-DISCONTINUITY":
+            #    self.log("[HLS] #EXT-X-DISCONTINUITY filtered")
+            #    continue
+
             # Segment URLs: make absolute
             if clean and not clean.startswith("#"):
                 if not clean.startswith("http"):
@@ -215,7 +220,7 @@ class PlutoTV(StreamerBase):
                 result.append(line.rstrip("\r"))
 
         output = "\n".join(result)
-        self.log(f"[HLS] Playlist ({len(result)} lines):\n{output}")
+        self.log(f"[HLS] Playlist ({len(result)} lines)") #:\n{output}")
         return output
 
     def _fetch_epg_batch(self, channel_ids: list[str]) -> dict:
@@ -383,7 +388,6 @@ class PlutoTV(StreamerBase):
         self._ensure_valid()
 
         #variant_url = self._resolve_variant_url(channel_id) 
-        # WIP: possibly get the master url here? instead of calling _live_stream_hls(channel_id) tp prevent multi spawning of ffmpeg making short timeout useless
         variant_url = f"http://127.0.0.1:{self.port}/{self.provider_name.lower()}/live/{channel_id}.m3u8"
 
         if not variant_url:
@@ -391,6 +395,7 @@ class PlutoTV(StreamerBase):
             return None
 
         self.print(f"[FFmpeg] Starting stream for channel: {channel_id}")
+        self.print(f"[FFmpeg] Variant URL: {variant_url}")
 
         cmd = [
             self.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
@@ -476,6 +481,8 @@ class PlutoTV(StreamerBase):
 
     def live_stream(self, channel_id: str):
         self._ensure_valid()
+        if self.ffmpeg:
+            return self._live_stream_ffmpeg(channel_id)
         return self._live_stream_hls(channel_id)
                 
     def vod_stream(self, vod_id: str): ...
@@ -503,6 +510,39 @@ class PlutoTV(StreamerBase):
                 f'tvg-logo="{logo}" tvg-chno="{number}" '
                 f'group-title="{category}",{name}'
             )
+
+            base_url = self.get_proxy_base_url()
+            lines.append(f"{base_url}/live/{ch_id}.{extension}")
+
+        return Response("\n".join(lines))
+    
+    def playlist_m3u_kodi(self) -> str:
+        """
+        M3U-Playlist aller PlutoTV-Kanäle.
+        Kompatibel mit VLC, Kodi IPTV Simple Client und Enigma2.
+        Extension: .ts bei FFmpeg-Modus (MPEG-TS), sonst .m3u8 (HLS).
+        """
+        self._ensure_valid()
+        extension = "m3u"
+
+        lines = ["#EXTM3U"]
+        for ch in self.channels:
+            ch_id  = ch.get("id", "")
+            name   = ch.get("name", ch_id)
+            number = ch.get("number", 0)
+            logo   = self._get_logo(ch)
+
+            category = self.provider_name
+
+            lines.append(
+                f'#EXTINF:-1 tvg-id="{ch_id}" tvg-name="{name}" '
+                f'tvg-logo="{logo}" tvg-chno="{number}" '
+                f'group-title="{category}",{name}'
+            )
+
+            lines.append("#KODIPROP:inputstream=inputstream.adaptive")
+            lines.append("#KODIPROP:inputstream.adaptive.manifest_type=hls")
+
             base_url = self.get_proxy_base_url()
             lines.append(f"{base_url}/live/{ch_id}.{extension}")
 
