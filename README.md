@@ -1,4 +1,4 @@
-# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.6.6-blue)
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.7.0-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
@@ -11,10 +11,11 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 - **Unified API** – One base URL, consistent endpoints across all providers
 - **M3U Playlists** – Ready-to-use playlists compatible with IPTV Simple Client, VLC, and Enigma2
 - **XMLTV EPG** – Electronic program guide in standard XMLTV format
-- **Live Streaming** – HLS proxy with automatic quality selection (not recommended, see known issues below)
-- **FFmpeg Remux** – Recommended: MPEG-TS passthrough via FFmpeg (see known issues below)
+- **Live Streaming** – HLS proxy with automatic quality selection
+- **Ad Filler** – Optional `--ad-filler` replaces ad segments with a static filler image, preventing codec-switch crashes at ad breaks
+- **FFmpeg Remux** – Optional MPEG-TS passthrough via FFmpeg (experimental, see known issues below)
 - **Modular Providers** – Each streaming service is a self-contained plugin
-- **Kodi Playlists** – Optional `--kodi` mode generates playlists with `inputstream.adaptive` props for native HLS handling in Kodi (better discontinuity support at ad breaks), not compatible with --ffmpeg
+- **Kodi Playlists** – Optional `--kodi` mode generates playlists with `inputstream.adaptive` props for native HLS handling in Kodi
 - **Easy to Extend** – Drop in a new provider file and it's auto-discovered
 
 ## Supported Providers
@@ -47,8 +48,11 @@ python app.py --ip 192.168.178.65 --flask-ip 192.168.178.65
 # Run with FFmpeg remux (stutter-free, requires ffmpeg)
 python app.py --ip 192.168.178.65 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
 
+# Run with ad-filler (replaces ad segments with static image during ad breaks)
+python app.py --ip 192.168.178.65 --port 7000 --ad-filler
+
 # Run with Kodi-compatible playlists (HLS only, do NOT combine with --ffmpeg)
-python app.py --ip 192.168.178.65 --port 7000 --kodi
+python app.py --ip 192.168.178.65 --port 7000 --kodi --ad-filler
 ```
 
 Then point your player at:
@@ -67,6 +71,8 @@ Then point your player at:
 | `--ffmpeg`         | `false`     | FFmpeg remux for stutter-free streams          |
 | `--ffmpeg-path`    | `ffmpeg`    | Path to FFmpeg binary                          |
 | `--ffmpeg-timeout` | `30`        | Watchdog timeout (seconds) for idle FFmpeg processes |
+| `--ffmpeg-selfproxy` | `false`   | Feed FFmpeg with proxy HLS playlist instead of raw provider URL |
+| `--ad-filler`      | `false`     | Replace ad segments with a static filler image (prevents codec-switch crashes at ad breaks) |
 | `--kodi`           | `false`     | Generate Kodi-compatible playlist with `inputstream.adaptive` props (HLS only, incompatible with `--ffmpeg`) |
 
 ## API Endpoints
@@ -112,17 +118,20 @@ lib/
 
 ## Known Issues
 
-**HLS mode (default, without `--ffmpeg`):**
-- Can hang or fail around ad → next episode transitions for some providers (e.g. PlutoTV)
-- Issues are typically related to how the provider signals end-of-stream or discontinuities in the HLS playlist
+**HLS mode (default):**
+- Without `--ad-filler`: ad breaks with different codec parameters can cause player crashes or stream stops
+- With `--ad-filler`: ad segments are replaced with a static filler image; stream continues seamlessly
+- `#EXT-X-ENDLIST` is always filtered to prevent stream stop at show boundaries
 
-**`--ffmpeg` mode (recommended for PlutoTV):**
-- Requires a working `ffmpeg` binary to be installed on the host system and accessible in `PATH` or explicitly set via `--ffmpeg-path`
-- FFmpeg-based remuxing to MPEG-TS is currently more stable than plain HLS passthrough, especially around ad transitions
-- Watchdog (`--ffmpeg-timeout`) will kill idle FFmpeg processes after the configured timeout (default: 30s)
-- Remaining caveats:
-  - short stalls are still possible on very messy ad/segment transitions
-  - higher CPU usage compared to plain HLS mode
+**`--ad-filler` mode (recommended for PlutoTV):**
+- Ad detection is based on URL patterns (`/creative/`, `_ad/`); some ad formats may not be detected yet
+- Filler image (`lib/static/filler.ts`) must match content codec parameters (H.264 720p, AAC 48kHz stereo)
+- PlutoTV bumper clips and URL-encoded ad patterns (`%2Fcreative%2F`) need additional pattern matching (WIP)
+
+**`--ffmpeg` mode (experimental):**
+- Requires a working `ffmpeg` binary installed on the host system
+- Copy mode cannot handle PlutoTV ad-break codec changes; re-encode mode (ultrafast) works but uses more CPU
+- Watchdog (`--ffmpeg-timeout`) kills idle FFmpeg processes after the configured timeout (default: 30s)
 ## License
 
 MIT
