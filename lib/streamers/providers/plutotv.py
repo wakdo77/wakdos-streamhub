@@ -10,10 +10,9 @@ import re
 from html import escape as _xe
 from lib.utils.ttlcache import TTLCache
 from lib.utils.ffmpegwrapper import FFmpegWrapper
+import os
 
-PLUTO_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
-PLUTO_EPG_DURATION_MIN  = 720   # Minuten EPG-Dauer pro Request (kann je nach Bedarf angepasst werden)
-PLUTO_EPG_BATCH_SIZE    = 100   # Kanal-IDs pro API-Request (URL-Länge begrenzen)
+
 
 PLUTO_BOOT_URL = (
     "https://boot.pluto.tv/v4/start"
@@ -35,6 +34,13 @@ PLUTO_BOOT_URL = (
     "&clientTime={dt}"
 )
 
+PLUTO_USERAGENT         = os.getenv("PLUTO_USERAGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+PLUTO_EPG_DURATION_MIN  = os.getenv("PLUTO_EPG_DURATION_MIN", 720)   # Minuten EPG-Dauer pro Request (kann je nach Bedarf angepasst werden)
+PLUTO_EPG_BATCH_SIZE    = os.getenv("PLUTO_EPG_BATCH_SIZE", 100)   # Kanal-IDs pro API-Request (URL-Länge begrenzen)
+
+# FFMPEG FLAGS:
+PLUTOTV_FFMPEG_DEBUGLEVEL = os.getenv("PLUTOTV_FFMPEG_DEBUGLEVEL", "warning")  # debug, info, warning, error
+
 class PlutoTV(StreamerBase):
     def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080, **kwargs):
         # required init of base class (StreamerBase) to set common attributes and http session
@@ -42,6 +48,7 @@ class PlutoTV(StreamerBase):
 
         # set the provider name (used in playlist URLs and logs, needs to be unique, may change later - WIP Class / Filename is unique )
         self.provider_name = "PlutoTV"
+        self._ad_filler = kwargs.get("ad_filler", False)
 
         # threading lock for JWT refresh (double-checked locking pattern)
         self._lock = threading.Lock()
@@ -185,19 +192,21 @@ class PlutoTV(StreamerBase):
     
     def _make_segments_absolute(self, playlist_content: str, playlist_url: str) -> str:
         """
-        Wandelt relative Segment-URLs in einer Varianten-Playlist in absolute URLs um.
-        Der Player kann Segmente dann direkt vom PlutoTV-CDN laden (kein JWT nötig).
+        Rewrites an HLS variant playlist:
+        - Converts relative segment URLs to absolute URLs
+        - Filters #EXT-X-ENDLIST (prevents stream stop at show boundaries)
+        - When _ad_filler=True: replaces ad segments with filler.ts and filters #EXT-X-DISCONTINUITY
 
-        playlist_url: die URL von der die Playlist abgerufen wurde (für relative Auflösung).
-
-        Besonderheit: #EXT-X-ENDLIST wird herausgefiltert.
-        Dieser Tag signalisiert dem Player das Stream-Ende (VOD-Verhalten) und tritt
-        bei PlutoTV an Sendungsgrenzen auf, was den Stream in Kodi stoppt.
+        Ad segments are identified by URL patterns (/creative/, _ad/).
+        #EXT-X-KEY lines are buffered so ad encryption keys don't leak to the unencrypted filler.
         """
-        # Basis: Verzeichnis der Playlist-URL (ohne Query-String)
         base = playlist_url.split("?")[0].rsplit("/", 1)[0] + "/"
+        filler_base = f"http://{self.ip}:{self.port}/static/filler.ts"
+        filler_seq = 0  # unique query param so HLS players don't skip duplicate URLs
 
         result = []
+        pending_key = None  # buffer KEY lines until we know if next segment is ad or content
+
         for line in playlist_content.splitlines():
             clean = line.strip()
 
@@ -206,21 +215,41 @@ class PlutoTV(StreamerBase):
                 self.print("[HLS] #EXT-X-ENDLIST filtered")
                 continue
 
-            # #EXT-X-DISCONTINUITY: marks ad break boundaries, causes VLC decoder resets
-            #if clean == "#EXT-X-DISCONTINUITY":
+            # #EXT-X-DISCONTINUITY: keep when ad_filler active – filler has same codec as content,
+            # so DISCONTINUITY only resets TS continuity counters (no codec-switch crash).
+            # Without ad_filler, original ads have different codecs → DISCONTINUITY causes crashes.
+            #if not self._ad_filler and clean == "#EXT-X-DISCONTINUITY":
             #    self.log("[HLS] #EXT-X-DISCONTINUITY filtered")
             #    continue
 
-            # Segment URLs: make absolute
+            # Buffer KEY lines when ad_filler active (decide later: ad or content)
+            if self._ad_filler and clean.startswith("#EXT-X-KEY:"):
+                pending_key = line.rstrip("\r")
+                continue
+
+            # Segment URLs: make absolute, detect ads
             if clean and not clean.startswith("#"):
                 if not clean.startswith("http"):
                     clean = urllib.parse.urljoin(base, clean)
-                result.append(clean)
+
+                if self._ad_filler and ("/creative/" in clean or "_ad/" in clean):
+                    # Ad segment: replace with unencrypted filler, drop buffered KEY
+                    filler_seq += 1
+                    result.append("#EXT-X-KEY:METHOD=NONE")
+                    result.append(f"{filler_base}?seq={filler_seq}")
+                    self.log("[HLS] Ad segment replaced with filler")
+                    pending_key = None
+                else:
+                    # Content segment: emit buffered KEY + original URL
+                    if pending_key:
+                        result.append(pending_key)
+                        pending_key = None
+                    result.append(clean)
             else:
                 result.append(line.rstrip("\r"))
 
         output = "\n".join(result)
-        self.log(f"[HLS] Playlist ({len(result)} lines)") #:\n{output}")
+        self.log(f"[HLS] Playlist ({len(result)} lines):\n{output}")
         return output
 
     def _fetch_epg_batch(self, channel_ids: list[str]) -> dict:
@@ -239,14 +268,17 @@ class PlutoTV(StreamerBase):
             return []
         return resp.json().get("data", [])
 
-    def _build_epg_xml(self) -> str:
+    def _build_epg_xml(self, channel_id: str = None) -> str:
         """
         Holt EPG-Daten für alle Kanäle in Batches und gibt einen XMLTV-String zurück.
         Zeitfenster: 2h zurück bis +10h (via _iso_time Default + PLUTO_EPG_DURATION_MIN).
         Wird über get_epg_xml() gecached mittels TTLCache
         """
         self._ensure_valid()
-        all_ids = [ch.get("id", "") for ch in self.channels if ch.get("id")]
+        if channel_id is not None:
+            all_ids = [channel_id]
+        else:
+            all_ids = [ch.get("id", "") for ch in self.channels if ch.get("id")]
 
         # EPG in Batches abrufen, positional zu channel_ids zuordnen
         timelines_by_channel: dict[str, list] = {}
@@ -264,6 +296,8 @@ class PlutoTV(StreamerBase):
         
         # <channel>-Einträge
         for ch in self.channels:
+            if channel_id is not None and ch.get("id") != channel_id:
+                continue
             ch_id = ch.get("id", "")
             name  = _xe(ch.get("name", ch_id))
             logo  = self._get_logo(ch)
@@ -383,33 +417,61 @@ class PlutoTV(StreamerBase):
         content = self._make_segments_absolute(v_resp.text, v_url)
         return Response(content, mimetype="application/vnd.apple.mpegurl")
 
-    def _live_stream_ffmpeg(self, channel_id: str, timeout: int = 30):
+    def _live_stream_ffmpeg(self, channel_id: str, timeout: int = 30, selfproxy: bool = False):
         """FFmpeg remux: handles HLS decryption + discontinuities, outputs clean MPEG-TS."""
         self._ensure_valid()
 
-        #variant_url = self._resolve_variant_url(channel_id) 
-        variant_url = f"http://127.0.0.1:{self.port}/{self.provider_name.lower()}/live/{channel_id}.m3u8"
+        if selfproxy:
+            # Feed FFmpeg with our own HLS endpoint instead of the raw provider URL.
+            # This gives us full control over the playlist (e.g. filtering #EXT-X-ENDLIST).
+            # Route .m3u8 always goes to _live_stream_hls() in app.py, no loop.
+            variant_url = f"http://127.0.0.1:{self.port}/{self.provider_name.lower()}/live/{channel_id}.m3u8"
+        else:
+            variant_url = self._resolve_variant_url(channel_id)
 
         if not variant_url:
             self.print("[FFmpeg] Can't find a variant. No stream for you today, buddy!")
             return None
 
-        self.print(f"[FFmpeg] Starting stream for channel: {channel_id}")
+        self.print(f"[FFmpeg] Starting stream for channel: {channel_id} (selfproxy={selfproxy})")
         self.print(f"[FFmpeg] Variant URL: {variant_url}")
 
+        # -- input flags
         cmd = [
-            self.ffmpeg_path, "-hide_banner", "-loglevel", "warning",
+            self.ffmpeg_path, "-hide_banner", "-loglevel", PLUTOTV_FFMPEG_DEBUGLEVEL,
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", "10",
             "-rw_timeout", "5000000",
             "-user_agent", self.USER_AGENT,
-            "-headers", f"Authorization: Bearer {self.jwt_token}\r\n",
-            "-i", variant_url,
-            "-c", "copy",
-            "-f", "mpegts",
-            "pipe:1",
+            "-fflags", "+discardcorrupt+genpts",  # discard corrupt packets; generate fresh PTS to fix timestamp jumps at ad breaks
         ]
+
+        # -- TEST input flags (add before -i) --------------------------------
+        # cmd += ["-use_wallclock_as_timestamps", "1"]   # ignore source timestamps entirely
+        # cmd += ["-reconnect_at_eof", "1"]              # reconnect when source signals EOF
+
+        cmd += ["-i", variant_url]
+
+        # -- output flags
+        # NOTE: copy mode cannot handle PlutoTV ad-break codec changes (new streams appear).
+        # Re-encoding with ultrafast normalizes the output across ad/content boundaries.
+        cmd += [
+            "-map", "0:v:0?",                              # pin to first video stream, ignore new streams at ad breaks
+            "-map", "0:a:0?",                              # pin to first audio stream (? = don't fail if briefly missing)
+            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-crf", "23",
+            "-c:a", "aac", "-b:a", "128k",
+            "-f", "mpegts",
+            "-mpegts_flags", "+resend_headers",
+            "-max_interleave_delta", "0",
+        ]
+
+        # -- TEST output flags (add before pipe:1) --------------------------
+        # cmd += ["-c", "copy"]                             # copy mode (fast, but breaks at ad boundaries)
+        # cmd += ["-avoid_negative_ts", "make_zero"]       # shift timestamps after discontinuities
+        # cmd += ["-err_detect", "ignore_err"]              # ignore decode errors at boundaries
+
+        cmd += ["pipe:1"]
 
         ffmpeg = FFmpegWrapper(cmd=cmd, name=f"PlutoTV-{channel_id}", logger=self.print, timeout=timeout)
         ffmpeg.start()
@@ -503,12 +565,12 @@ class PlutoTV(StreamerBase):
             number = ch.get("number", 0)
             logo   = self._get_logo(ch)
 
-            category = self.provider_name
+            group_title = self.provider_name
 
             lines.append(
                 f'#EXTINF:-1 tvg-id="{ch_id}" tvg-name="{name}" '
                 f'tvg-logo="{logo}" tvg-chno="{number}" '
-                f'group-title="{category}",{name}'
+                f'group-title="{group_title}",{name}'
             )
 
             base_url = self.get_proxy_base_url()
@@ -518,12 +580,11 @@ class PlutoTV(StreamerBase):
     
     def playlist_m3u_kodi(self) -> str:
         """
-        M3U-Playlist aller PlutoTV-Kanäle.
-        Kompatibel mit VLC, Kodi IPTV Simple Client und Enigma2.
-        Extension: .ts bei FFmpeg-Modus (MPEG-TS), sonst .m3u8 (HLS).
+        Kodi-optimierte M3U-Playlist mit inputstream.adaptive.
+        Uses proxy HLS endpoint with #EXT-X-ENDLIST filtering.
         """
         self._ensure_valid()
-        extension = "m3u"
+        extension = "m3u8"
 
         lines = ["#EXTM3U"]
         for ch in self.channels:
@@ -541,7 +602,17 @@ class PlutoTV(StreamerBase):
             )
 
             lines.append("#KODIPROP:inputstream=inputstream.adaptive")
-            lines.append("#KODIPROP:inputstream.adaptive.manifest_type=hls")
+
+            # TEST: direct master URL (Kodi handles HLS natively, but crashes at ad breaks)
+            #lines.append('#KODIPROP:inputstream.adaptive.manifest_config={"hls_ignore_endlist": true}')
+            #lines.append(self._master_url(ch_id))
+
+            # TEST: ffmpegdirect (has reconnect but can't decode H.264 on some systems)
+            #lines.append("#KODIPROP:inputstream=inputstream.ffmpegdirect")
+            #lines.append("#KODIPROP:inputstream.ffmpegdirect.is_realtime_stream=true")
+            #lines.append("#KODIPROP:inputstream.ffmpegdirect.stream_mode=timeshift")
+            #lines.append("#KODIPROP:inputstream.ffmpegdirect.open_mode=ffmpeg")
+            #lines.append("#KODIPROP:inputstream.ffmpegdirect.reconnect_stream=true")
 
             base_url = self.get_proxy_base_url()
             lines.append(f"{base_url}/live/{ch_id}.{extension}")

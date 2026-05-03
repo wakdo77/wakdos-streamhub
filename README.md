@@ -14,6 +14,7 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 - **Live Streaming** – HLS proxy with automatic quality selection (not recommended, see known issues below)
 - **FFmpeg Remux** – Recommended: MPEG-TS passthrough via FFmpeg (see known issues below)
 - **Modular Providers** – Each streaming service is a self-contained plugin
+- **Kodi Playlists** – Optional `--kodi` mode generates playlists with `inputstream.adaptive` props for native HLS handling in Kodi (better discontinuity support at ad breaks), not compatible with --ffmpeg
 - **Easy to Extend** – Drop in a new provider file and it's auto-discovered
 
 ## Supported Providers
@@ -46,7 +47,7 @@ python app.py --ip 192.168.178.65 --flask-ip 192.168.178.65
 # Run with FFmpeg remux (stutter-free, requires ffmpeg)
 python app.py --ip 192.168.178.65 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
 
-# Run with kodi m3u playlists
+# Run with Kodi-compatible playlists (HLS only, do NOT combine with --ffmpeg)
 python app.py --ip 192.168.178.65 --port 7000 --kodi
 ```
 

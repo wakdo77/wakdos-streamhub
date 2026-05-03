@@ -4,7 +4,6 @@ from lib.streamers.providers.plutotv import PlutoTV  # noqa: F401 – registrier
 import lib.streamers.factory as factory
 from lib.streamers.factory import all_streamer_classes, get_streamer, all_streamer_instances
 
-
 # ─── Konfiguration ───────────────────────────────────────────────────────────
 __version__ = "0.6.6" # ad-break stability: fix ffmpeg routing, filter #EXT-X-DISCONTINUITY, add --kodi flag 
 
@@ -15,7 +14,6 @@ app = Flask("Streamer Proxy v" + __version__, static_folder="lib/static", templa
 # get all available streamers from lib/streamers/providers/
 streamers = all_streamer_classes()
 ffmpeg_timeout = 30
-
 
 @app.route("/")
 def index():
@@ -50,7 +48,7 @@ def live_stream(streamer_name: str, channel_id: str, ext: str = "m3u8"):
 
     streamer = get_streamer(streamer_name)
     if ext == "ts" and streamer.ffmpeg:
-        return streamer._live_stream_ffmpeg(channel_id, args.ffmpeg_timeout)
+        return streamer._live_stream_ffmpeg(channel_id, args.ffmpeg_timeout, selfproxy=args.ffmpeg_selfproxy)
     return streamer._live_stream_hls(channel_id)
 
 @app.route("/<streamer_name>/vod/<vod_id>")
@@ -127,6 +125,18 @@ if __name__ == "__main__":
         help="Watchdog Timeout for ffmpeg instances (default: 30)",
     )
     parser.add_argument(
+        "--ffmpeg-selfproxy",
+        action="store_true",
+        help="Feed FFmpeg with our own HLS proxy playlist instead of the raw provider URL (allows playlist filtering and manipulation, e.g. stripping #EXT-X-ENDLIST)",
+        default=False,
+    )
+    parser.add_argument(
+        "--ad-filler",
+        action="store_true",
+        help="Replace ad segments with a static filler image in HLS playlists (prevents codec-switch crashes at ad breaks)",
+        default=False,
+    )
+    parser.add_argument(
         "--kodi",
         action="store_true",
         help="Kodi-kompatible Playlists generieren (nur für HLS-Streams, nicht mit FFmpeg-Remux)",
@@ -136,7 +146,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # configure ip, port for all streamers
-    factory.configure(debug=args.debug, ip=args.ip, port=args.port, ffmpeg=args.ffmpeg, ffmpeg_path=args.ffmpeg_path)
+    factory.configure(debug=args.debug, ip=args.ip, port=args.port, ffmpeg=args.ffmpeg, ffmpeg_path=args.ffmpeg_path, ad_filler=args.ad_filler)
     # configure ffmpeg timeout
     ffmpeg_timeout = args.ffmpeg_timeout
 
@@ -155,6 +165,8 @@ if __name__ == "__main__":
     print(f"  FFmpeg          : {args.ffmpeg}")
     if args.ffmpeg:
         print(f"  FFmpeg Timeout  : {args.ffmpeg_timeout}")
+        print(f"  FFmpeg Selfproxy: {args.ffmpeg_selfproxy}")
+    print(f"  Ad-Filler       : {args.ad_filler}")
     if args.kodi:
         print(f"  Kodi-Playlisten : {args.kodi} (nur ohne ffmpeg)")
     print(f"{'='*60}\n")
