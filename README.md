@@ -36,23 +36,17 @@ python -m venv venv
 venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 
-# Run (standard HLS mode)
-python app.py --ip 192.168.178.65 --port 7000
+# ⭐ Recommended for KODi Users: Kodi with ad-filler (seamless playback, no ad crashes)
+python app.py --ip 192.168.178.65 --port 7000 --kodi --ad-filler
 
-# Default: Flask on all interfaces (0.0.0.0)
-python app.py --ip 192.168.178.65 --port 7000
-
-# Bind Flask to specific IP (default: 0.0.0.0 = all interfaces)
-python app.py --ip 192.168.178.65 --flask-ip 192.168.178.65
-
-# Run with FFmpeg remux (stutter-free, requires ffmpeg)
-python app.py --ip 192.168.178.65 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
-
-# Run with ad-filler (replaces ad segments with static image during ad breaks)
+# Standard HLS mode (VLC, Enigma2, etc.)
 python app.py --ip 192.168.178.65 --port 7000 --ad-filler
 
-# Run with Kodi-compatible playlists (HLS only, do NOT combine with --ffmpeg)
-python app.py --ip 192.168.178.65 --port 7000 --kodi --ad-filler
+# Without ad-filler (ads may cause stream crashes on some players)
+python app.py --ip 192.168.178.65 --port 7000
+
+# FFmpeg remux (experimental, see known issues)
+python app.py --ip 192.168.178.65 --port 7000 --ffmpeg --ffmpeg-path /usr/bin/ffmpeg
 ```
 
 Then point your player at:
@@ -124,9 +118,10 @@ lib/
 - `#EXT-X-ENDLIST` is always filtered to prevent stream stop at show boundaries
 
 **`--ad-filler` mode (recommended for PlutoTV):**
-- Ad detection is based on URL patterns (`/creative/`, `_ad/`); some ad formats may not be detected yet
+- Tested stable with Kodi (`--kodi --ad-filler`) and VLC (`--ad-filler`)
+- Ad detection patterns: `/creative/`, `_ad/`, `%2Fcreative%2F`, `_ad%2F`, `Pluto_TV_OandO`, `_ad_bumper_`
 - Filler image (`lib/static/filler.ts`) must match content codec parameters (H.264 720p, AAC 48kHz stereo)
-- PlutoTV bumper clips and URL-encoded ad patterns (`%2Fcreative%2F`) need additional pattern matching (WIP)
+- Note: `--kodi` and `--ffmpeg` are mutually exclusive; `--kodi` takes precedence
 
 **`--ffmpeg` mode (experimental):**
 - Requires a working `ffmpeg` binary installed on the host system

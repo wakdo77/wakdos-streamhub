@@ -232,7 +232,11 @@ class PlutoTV(StreamerBase):
                 if not clean.startswith("http"):
                     clean = urllib.parse.urljoin(base, clean)
 
-                if self._ad_filler and ("/creative/" in clean or "_ad/" in clean):
+                if self._ad_filler and (
+                    "/creative/" in clean or "_ad/" in clean
+                    or "%2Fcreative%2F" in clean or "_ad%2F" in clean
+                    or "_ad_bumper_" in clean or "Pluto_TV_OandO" in clean
+                ):
                     # Ad segment: replace with unencrypted filler, drop buffered KEY
                     filler_seq += 1
                     result.append("#EXT-X-KEY:METHOD=NONE")
