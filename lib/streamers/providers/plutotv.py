@@ -38,6 +38,8 @@ PLUTO_USERAGENT         = os.getenv("PLUTO_USERAGENT", "Mozilla/5.0 (Windows NT 
 PLUTO_EPG_DURATION_MIN  = os.getenv("PLUTO_EPG_DURATION_MIN", 720)   # Minuten EPG-Dauer pro Request (kann je nach Bedarf angepasst werden)
 PLUTO_EPG_BATCH_SIZE    = os.getenv("PLUTO_EPG_BATCH_SIZE", 100)   # Kanal-IDs pro API-Request (URL-Länge begrenzen)
 
+PLUTO_FILLER_MEDIA_FILE = os.getenv("PLUTO_FILLER_MEDIA_PATH", "filler_blackwhite_quiet.ts")  # filename of a short (1-5s) silent+black video segment for ad replacement (must be MPEG-TS if using FFmpeg remux mode and needs to reside in ./static/ )
+
 # FFMPEG FLAGS:
 PLUTOTV_FFMPEG_DEBUGLEVEL = os.getenv("PLUTOTV_FFMPEG_DEBUGLEVEL", "warning")  # debug, info, warning, error
 
@@ -201,7 +203,7 @@ class PlutoTV(StreamerBase):
         #EXT-X-KEY lines are buffered so ad encryption keys don't leak to the unencrypted filler.
         """
         base = playlist_url.split("?")[0].rsplit("/", 1)[0] + "/"
-        filler_base = f"http://{self.ip}:{self.port}/static/filler.ts"
+        filler_base = f"http://{self.ip}:{self.port}/static/{PLUTO_FILLER_MEDIA_FILE}"
         filler_seq = 0  # unique query param so HLS players don't skip duplicate URLs
 
         result = []

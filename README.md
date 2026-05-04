@@ -69,6 +69,16 @@ Then point your player at:
 | `--ad-filler`      | `false`     | Replace ad segments with a static filler image (prevents codec-switch crashes at ad breaks) |
 | `--kodi`           | `false`     | Generate Kodi-compatible playlist with `inputstream.adaptive` props (HLS only, incompatible with `--ffmpeg`) |
 
+### Environment Variables (PlutoTV)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PLUTO_USERAGENT` | Chrome 145 UA | User-Agent header for PlutoTV API requests |
+| `PLUTO_EPG_DURATION_MIN` | `720` | EPG duration per request in minutes |
+| `PLUTO_EPG_BATCH_SIZE` | `100` | Channel IDs per EPG API request (URL length limit) |
+| `PLUTO_FILLER_MEDIA_PATH` | `filler_blackwhite_quiet.ts` | Filler segment filename in `lib/static/` (MPEG-TS, H.264 720p, AAC 48kHz) |
+| `PLUTOTV_FFMPEG_DEBUGLEVEL` | `warning` | FFmpeg log level (`debug`, `info`, `warning`, `error`) |
+
 ## API Endpoints
 
 All endpoints follow the pattern `/<provider>/...`:
@@ -99,7 +109,7 @@ lib/
 ├── utils/
 │   ├── ttlcache.py             # Generic TTL cache
 │   └── ffmpegwrapper.py        # Wrapper for future implementations
-├── static/                     # Web UI assets
+├── static/                     # Web UI assets + filler segments (*.ts)
 └── templates/                  # Jinja2 templates
 ```
 
@@ -120,7 +130,9 @@ lib/
 **`--ad-filler` mode (recommended for PlutoTV):**
 - Tested stable with Kodi (`--kodi --ad-filler`) and VLC (`--ad-filler`)
 - Ad detection patterns: `/creative/`, `_ad/`, `%2Fcreative%2F`, `_ad%2F`, `Pluto_TV_OandO`, `_ad_bumper_`
-- Filler image (`lib/static/filler.ts`) must match content codec parameters (H.264 720p, AAC 48kHz stereo)
+- Filler segment in `lib/static/` must match content codec parameters (H.264 720p, AAC 48kHz stereo)
+- Default: `filler_blackwhite_fast.ts` – configurable via `PLUTO_FILLER_MEDIA_PATH` env var
+- Included fillers: `filler.ts` (static image), `filler_blackwhite_quiet.ts`, `filler_blackwhite_lowvolume.ts`, `filler_blackwhite_fast.ts`
 - Note: `--kodi` and `--ffmpeg` are mutually exclusive; `--kodi` takes precedence
 
 **`--ffmpeg` mode (experimental):**
