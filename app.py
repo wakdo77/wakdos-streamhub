@@ -5,7 +5,7 @@ import lib.streamers.factory as factory
 from lib.streamers.factory import all_streamer_classes, get_streamer, all_streamer_instances
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.7.0" # ad-filler: replace PlutoTV ad segments with static filler in HLS playlists
+__version__ = "0.7.1" # fixed ad-filler ts
 
 
 # Flask-App initialisieren

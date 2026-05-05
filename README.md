@@ -1,4 +1,4 @@
-# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.7.0-blue)
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.7.1-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
