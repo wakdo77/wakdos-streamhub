@@ -1,4 +1,4 @@
-# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.7.1-blue)
+# wakdos-streamhub ![Version](https://img.shields.io/badge/version-v0.8.0-blue)
 
 A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG) behind a single local API.
 
@@ -6,8 +6,11 @@ A modular Python proxy that unifies multiple streaming services (IPTV, VOD, EPG)
 
 wakdos-streamhub acts as a central hub between streaming providers and your media player. Instead of configuring each service separately, you point your player (Kodi, VLC, Jellyfin, etc.) at one local endpoint and get M3U playlists, live streams, and EPG data for all configured providers.
 
-## Features
+## New Features in v0.8.0
+- Add zattootv provider integration with login-based cookie flow
+- DRM-backed streams currently work only through Kodi in the present state (RTL Group streams are a special case and arent supported atm )
 
+## Features
 - **Unified API** – One base URL, consistent endpoints across all providers
 - **M3U Playlists** – Ready-to-use playlists compatible with IPTV Simple Client, VLC, and Enigma2
 - **XMLTV EPG** – Electronic program guide in standard XMLTV format
@@ -23,8 +26,8 @@ wakdos-streamhub acts as a central hub between streaming providers and your medi
 | Provider | Status | DRM | Notes |
 |----------|--------|-----|-------|
 | PlutoTV  | ✅ Working | None | Free, anonymous, HLS |
-| ??????   | 🔜 Planned | None | Login-based, FAST channels |
-| ??????   | 🔜 Planned | Widevine L3 | First DRM test case |
+| ZattooTV   | 🚧 WIP | Widevine L3 | Login-based, First DRM test case |
+| ??????   | 🔜 Planned | None | Other providers |
 
 ## Quick Start
 
@@ -53,6 +56,13 @@ Then point your player at:
 - **Playlist:** `http://<ip>:7000/plutotv/playlist.m3u`
 - **EPG:** `http://<ip>:7000/plutotv/epg.xml`
 
+## Important for ZattooTV User
+- To login to ZattooTV, please run the script ` zattootv_login.py` located in the root directory and follow the instructions
+```bash
+# follow the cli flow, have your credentials with you
+python zattootv_login.py
+```
+
 ### CLI Options
 
 | Option             | Default     | Description                                    |
@@ -73,11 +83,18 @@ Then point your player at:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PLUTO_USERAGENT` | Chrome 145 UA | User-Agent header for PlutoTV API requests |
-| `PLUTO_EPG_DURATION_MIN` | `720` | EPG duration per request in minutes |
-| `PLUTO_EPG_BATCH_SIZE` | `100` | Channel IDs per EPG API request (URL length limit) |
-| `PLUTO_FILLER_MEDIA_PATH` | `filler_blackwhite_quiet.ts` | Filler segment filename in `lib/static/` (MPEG-TS, H.264 720p, AAC 48kHz) |
-| `PLUTOTV_FFMPEG_DEBUGLEVEL` | `warning` | FFmpeg log level (`debug`, `info`, `warning`, `error`) |
+| `PLUTOTV_USERAGENT` | Chrome 145 UA | User-Agent header for PlutoTV API requests |
+| `PLUTOTV_EPG_DURATION_MIN` | 720 | EPG duration per request in minutes |
+| `PLUTOTV_EPG_BATCH_SIZE` | 100 | Channel IDs per EPG API request (URL length limit) |
+| `PLUTOTV_FILLER_MEDIA_PATH` | filler_blackwhite.ts | Filler segment filename in `lib/static/` (MPEG-TS, H.264 720p, AAC 48kHz) |
+| `PLUTOTV_FFMPEG_DEBUGLEVEL` | warning | FFmpeg log level (`debug`, `info`, `warning`, `error`) |
+
+### Environment Variables (ZattooTV)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ZATTOOTV_USERAGENT` | Chrome 145 UA | User-Agent header for ZattooTV API requests |
+| `ZATTOOTV_COOKIE_FILE` | cache/zattootv/ | Cookie file created by `zattoo_login.py` script |
+| `ZATTOOTV_EPG_DURATION_HOURS` | 12 | EPG duration per request in hours
 
 ## API Endpoints
 
@@ -102,13 +119,14 @@ See [DEVELOPER.md](DEVELOPER.md) for a detailed guide with code examples.
 ```
 app.py                          # Flask app, routes, CLI entry point
 lib/
+├── cache/
 ├── streamers/
 │   ├── streamerbase.py         # Abstract base class for all providers
 │   ├── factory.py              # Auto-discovery & singleton registry
 │   └── providers/              # One file per streaming service
 ├── utils/
 │   ├── ttlcache.py             # Generic TTL cache
-│   └── ffmpegwrapper.py        # Wrapper for future implementations
+│   └── ffmpegwrapper.py        # Wrapper
 ├── static/                     # Web UI assets + filler segments (*.ts)
 └── templates/                  # Jinja2 templates
 ```
@@ -131,14 +149,18 @@ lib/
 - Tested stable with Kodi (`--kodi --ad-filler`) and VLC (`--ad-filler`)
 - Ad detection patterns: `/creative/`, `_ad/`, `%2Fcreative%2F`, `_ad%2F`, `Pluto_TV_OandO`, `_ad_bumper_`
 - Filler segment in `lib/static/` must match content codec parameters (H.264 720p, AAC 48kHz stereo)
-- Default: `filler_blackwhite_fast.ts` – configurable via `PLUTO_FILLER_MEDIA_PATH` env var
-- Included fillers: `filler.ts` (static image), `filler_blackwhite_quiet.ts`, `filler_blackwhite_lowvolume.ts`, `filler_blackwhite_fast.ts`
+- Default: `filler_blackwhite_fast.ts` – configurable via `PLUTOTV_FILLER_MEDIA_PATH` env var
+- Included fillers: `filler.ts` (static image), `filler_blackwhite.ts`, `filler_blackwhite_lowvolume.ts`, `filler_blackwhite_fast.ts`
 - Note: `--kodi` and `--ffmpeg` are mutually exclusive; `--kodi` takes precedence
 
 **`--ffmpeg` mode (experimental):**
 - Requires a working `ffmpeg` binary installed on the host system
 - Copy mode cannot handle PlutoTV ad-break codec changes; re-encode mode (ultrafast) works but uses more CPU
 - Watchdog (`--ffmpeg-timeout`) kills idle FFmpeg processes after the configured timeout (default: 30s)
+
+**ZattooTV:**
+- RTL group channels and some other channels don't work on most hardware running Kodi and aren't supported atm
+
 ## License
 
 MIT

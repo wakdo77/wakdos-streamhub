@@ -14,7 +14,7 @@ import os
 
 
 
-PLUTO_BOOT_URL = (
+PLUTOTV_BOOT_URL = (
     "https://boot.pluto.tv/v4/start"
     "?appName=web"
     "&appVersion=9.19.0-7a6c115631d945c4f7327de3e03b7c474b692657"
@@ -34,11 +34,11 @@ PLUTO_BOOT_URL = (
     "&clientTime={dt}"
 )
 
-PLUTO_USERAGENT         = os.getenv("PLUTO_USERAGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
-PLUTO_EPG_DURATION_MIN  = os.getenv("PLUTO_EPG_DURATION_MIN", 720)   # Minuten EPG-Dauer pro Request (kann je nach Bedarf angepasst werden)
-PLUTO_EPG_BATCH_SIZE    = os.getenv("PLUTO_EPG_BATCH_SIZE", 100)   # Kanal-IDs pro API-Request (URL-Länge begrenzen)
+PLUTOTV_USERAGENT         = os.getenv("PLUTOTV_USERAGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+PLUTOTV_EPG_DURATION_MIN  = os.getenv("PLUTOTV_EPG_DURATION_MIN", 720)   # Minuten EPG-Dauer pro Request (kann je nach Bedarf angepasst werden)
+PLUTOTV_EPG_BATCH_SIZE    = os.getenv("PLUTOTV_EPG_BATCH_SIZE", 100)   # Kanal-IDs pro API-Request (URL-Länge begrenzen)
 
-PLUTO_FILLER_MEDIA_FILE = os.getenv("PLUTO_FILLER_MEDIA_PATH", "filler_blackwhite.ts")  # filename of a short (1-5s) silent+black video segment for ad replacement (must be MPEG-TS if using FFmpeg remux mode and needs to reside in ./static/ )
+PLUTOTV_FILLER_MEDIA_FILE = os.getenv("PLUTOTV_FILLER_MEDIA_PATH", "filler_blackwhite.ts")  # filename of a short (1-5s) silent+black video segment for ad replacement (must be MPEG-TS if using FFmpeg remux mode and needs to reside in ./static/ )
 
 # FFMPEG FLAGS:
 PLUTOTV_FFMPEG_DEBUGLEVEL = os.getenv("PLUTOTV_FFMPEG_DEBUGLEVEL", "warning")  # debug, info, warning, error
@@ -57,7 +57,7 @@ class PlutoTV(StreamerBase):
 
         # header for plutotv
         self.http.headers.update({
-            "User-Agent": PLUTO_USERAGENT})
+            "User-Agent": PLUTOTV_USERAGENT})
         
         # data from boot response
         self.jwt_token = None
@@ -81,7 +81,7 @@ class PlutoTV(StreamerBase):
         self._channels_cache = TTLCache[str](ttl_minutes=120)
 
         if self._ad_filler:
-            self.print(f"Filler TS: {PLUTO_FILLER_MEDIA_FILE} (ad_filler mode active)")
+            self.print(f"Filler TS: {PLUTOTV_FILLER_MEDIA_FILE} (ad_filler mode active)")
 
 
     # -------------------------------------------------
@@ -206,7 +206,7 @@ class PlutoTV(StreamerBase):
         #EXT-X-KEY lines are buffered so ad encryption keys don't leak to the unencrypted filler.
         """
         base = playlist_url.split("?")[0].rsplit("/", 1)[0] + "/"
-        filler_base = f"http://{self.ip}:{self.port}/static/{PLUTO_FILLER_MEDIA_FILE}"
+        filler_base = f"http://{self.ip}:{self.port}/static/{PLUTOTV_FILLER_MEDIA_FILE}"
         filler_seq = 0  # unique query param so HLS players don't skip duplicate URLs
 
         result = []
@@ -269,7 +269,7 @@ class PlutoTV(StreamerBase):
             + "/v2/guide/timelines"
             + f"?start={last_hour_iso}"
             + f"&channelIds={','.join(channel_ids)}"
-            + f"&duration={PLUTO_EPG_DURATION_MIN}"
+            + f"&duration={PLUTOTV_EPG_DURATION_MIN}"
         )
         resp = self.http.get(url, headers={"Authorization": f"Bearer {self.jwt_token}"})
         if not resp.ok:
@@ -280,7 +280,7 @@ class PlutoTV(StreamerBase):
     def _build_epg_xml(self, channel_id: str = None) -> str:
         """
         Holt EPG-Daten für alle Kanäle in Batches und gibt einen XMLTV-String zurück.
-        Zeitfenster: 2h zurück bis +10h (via _iso_time Default + PLUTO_EPG_DURATION_MIN).
+        Zeitfenster: 2h zurück bis +10h (via _iso_time Default + PLUTOTV_EPG_DURATION_MIN).
         Wird über get_epg_xml() gecached mittels TTLCache
         """
         self._ensure_valid()
@@ -291,8 +291,8 @@ class PlutoTV(StreamerBase):
 
         # EPG in Batches abrufen, positional zu channel_ids zuordnen
         timelines_by_channel: dict[str, list] = {}
-        for i in range(0, len(all_ids), PLUTO_EPG_BATCH_SIZE):
-            batch_ids  = all_ids[i : i + PLUTO_EPG_BATCH_SIZE]
+        for i in range(0, len(all_ids), PLUTOTV_EPG_BATCH_SIZE):
+            batch_ids  = all_ids[i : i + PLUTOTV_EPG_BATCH_SIZE]
             batch_data = self._fetch_epg_batch(batch_ids)
             for j, item in enumerate(batch_data):
                 ch_id = item.get("channelId") or (batch_ids[j] if j < len(batch_ids) else None)
@@ -535,7 +535,7 @@ class PlutoTV(StreamerBase):
         now_utc = datetime.now(timezone.utc)
         launch_date = now_utc.isoformat(timespec='seconds').replace('+00:00', 'Z')
 
-        url = PLUTO_BOOT_URL.format(dt=urllib.parse.quote(launch_date), cid=uuid.uuid4())
+        url = PLUTOTV_BOOT_URL.format(dt=urllib.parse.quote(launch_date), cid=uuid.uuid4())
         response = self.http.get(url)
         if response.status_code == 200:
             data = response.json()
@@ -611,6 +611,7 @@ class PlutoTV(StreamerBase):
             )
 
             lines.append("#KODIPROP:inputstream=inputstream.adaptive")
+            lines.append("#KODIPROP:inputstream.adaptive.manifest_type=hls")
 
             # TEST: direct master URL (Kodi handles HLS natively, but crashes at ad breaks)
             #lines.append('#KODIPROP:inputstream.adaptive.manifest_config={"hls_ignore_endlist": true}')

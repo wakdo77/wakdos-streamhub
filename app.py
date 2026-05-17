@@ -5,7 +5,7 @@ import lib.streamers.factory as factory
 from lib.streamers.factory import all_streamer_classes, get_streamer, all_streamer_instances
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.7.1" # fixed ad-filler ts
+__version__ = "0.8.0" # feat(zattoo): add zattootv provider with login and kodi DRM support, fixed ad-filler ts and fixed some variable naming for better clarity 
 
 
 # Flask-App initialisieren
@@ -75,7 +75,7 @@ def epg_xml(streamer_name: str):
     streamer_name = streamer_name.lower()
     if streamer_name not in streamers:
         abort(404, description=f"Streamer {streamer_name} nicht gefunden. Verfügbare Streamer: {', '.join(streamers)}")
-    return get_streamer(streamer_name).get_epg_xml()
+    return Response(get_streamer(streamer_name).get_epg_xml(), mimetype="audio/x-mpegurl")
 
 
 # ─── Start ───────────────────────────────────────────────────────────────────
