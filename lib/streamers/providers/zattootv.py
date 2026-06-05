@@ -6,15 +6,20 @@ from flask import Response, redirect
 from html import escape as _xe
 from lib.utils.helpers import load_pickle
 from lib.utils.ttlcache import TTLCache
-
+import json
 
 ZATTOOTV_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
-ZATTOOTV_COOKIE_FILE = "cache/zattootv/login.pkl"
 ZATTOOTV_EPG_DURATION_HOURS = os.getenv("ZATTOOTV_EPG_DURATION_HOURS", 11)
+
+# ZATTOTV DATA LOCATINOS
+ZATTOOTV_COOKIE_FILE = "cache/zattootv/login.pkl"
 
 # CACHE DURATIONS
 ZATTOOTV_PLAYLIST_CACHE_MINUTES = os.getenv("ZATTOOTV_PLAYLIST_CACHE_MINUTES", 60)
 ZATTOOTV_EPG_CACHE_MINUTES = os.getenv("ZATTOOTV_EPG_CACHE_MINUTES", 360)
+
+# ZATTOOTV TESTING FLAGS
+# ZATTOOTV_RAW_CHANNELS = os.getenv("ZATTOOTV_RAW_CHANNELS", False).lower() in ("1", "true", "yes")
 
 class ZattooTV(StreamerBase):
     def __init__(self, debug: bool = False, ip: str = "localhost", port: int = 7080, **kwargs):
@@ -46,6 +51,8 @@ class ZattooTV(StreamerBase):
         # playlist caching (optional, könnte später implementiert werden)
         self._playlist_cache       = TTLCache[str](ttl_minutes=ZATTOOTV_PLAYLIST_CACHE_MINUTES)
         self._playlist_cache_kodi  = TTLCache[str](ttl_minutes=ZATTOOTV_PLAYLIST_CACHE_MINUTES)
+
+        self.boot()
 
     def _base_headers(self, accept: str = "application/json") -> dict:
         return {
@@ -167,21 +174,6 @@ class ZattooTV(StreamerBase):
             return False
         return best.get("availability") == "available"
 
-    """
-    def _channel_cids(self, ch: dict, requested_channel_id: str | None = None) -> list[str]:
-        ids = []
-        if requested_channel_id:
-            ids.append(requested_channel_id)
-        for key in ("cid", "url_cid"):
-            value = ch.get(key)
-            if value and value not in ids:
-                ids.append(value)
-        for alias in ch.get("alias_cids", []):
-            if alias and alias not in ids:
-                ids.append(alias)
-        return ids
-    """
-
     def _channel_cids(self, ch: dict, requested_channel_id: str | None = None) -> list[str]:
         ids = []
         if requested_channel_id:
@@ -265,35 +257,6 @@ class ZattooTV(StreamerBase):
         self.print(f"Live watch call failed for channel '{ch.get('cid', 'unknown')}'\n\n")
         return None
 
-    """
-    def _resolve_live_dash_widevine(self, ch: dict, requested_channel_id: str | None = None) -> dict | None:
-        self.http.headers.update(self._base_headers())
-        for cid in self._channel_cids(ch, requested_channel_id=requested_channel_id):
-            endpoint = f"{self.watch_live_base_url}/{cid}"
-            payload = {
-                "stream_type": "dash_widevine",
-                "https_watch_urls": True,
-                "timeshift": 10800,
-                "uuid": self.uuid,
-                "client_app_token": self.client_app_token or "",
-            }
-            try:
-                resp = self.http.post(endpoint, data=payload, timeout=15)
-                if not resp.ok:
-                    continue
-                data = resp.json()
-            except Exception:
-                continue
-            stream = data.get("stream", {})
-            watch_urls = stream.get("watch_urls") or []
-            entry = watch_urls[0] if isinstance(watch_urls, list) and watch_urls else {}
-            mpd_url = entry.get("url") or stream.get("url")
-            license_url = entry.get("license_url") or stream.get("license_url")
-            if mpd_url and license_url:
-                return {"mpd_url": mpd_url, "license_url": license_url, "cid": cid}
-        return None
-    """
-
     def _resolve_live_dash_widevine(
         self,
         ch: dict,
@@ -335,19 +298,21 @@ class ZattooTV(StreamerBase):
             )
             if mpd_url and license_url:
                 self.log(f"DASH resolve success: cid={cid} mpd={mpd_url[:160]} license={license_url[:160]}")
-                try:
-                    os.makedirs("cache/zattootv", exist_ok=True)
-                    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-                    raw_debug_path = f"cache/zattootv/dash_watch_live_raw_{cid}_{ts}.json"
-                    with open(raw_debug_path, "w", encoding="utf-8") as f:
-                        f.write(resp.text)
-                    self.log(f"DASH watch/live raw saved: cid={cid} path={raw_debug_path} chars={len(resp.text)}")
-                except Exception as ex:
-                    self.log(f"DASH watch/live raw save error: cid={cid} error={ex}")
+                """
+                if self.debug:
+                    try:
+                        os.makedirs("cache/zattootv", exist_ok=True)
+                        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                        raw_debug_path = f"cache/zattootv/dash_watch_live_raw_{cid}_{ts}.json"
+                        with open(raw_debug_path, "w", encoding="utf-8") as f:
+                            f.write(resp.text)
+                        self.log(f"DASH watch/live raw saved: cid={cid} path={raw_debug_path} chars={len(resp.text)}")
+                    except Exception as ex:
+                        self.log(f"DASH watch/live raw save error: cid={cid} error={ex}")
+                """
                 return {"mpd_url": mpd_url, "license_url": license_url, "cid": cid}
         self.log(f"DASH resolve failed: requested={requested_channel_id} cids={cids}")
         return None
-
 
     def _xmltv_time(self, unix_ts: int) -> str:
         return datetime.fromtimestamp(unix_ts, tz=timezone.utc).strftime("%Y%m%d%H%M%S +0000")
@@ -433,7 +398,7 @@ class ZattooTV(StreamerBase):
         if not resp.ok:
             self.print(f"Login failed: {resp.status_code} {data}")
             return False
-        return self._fetch_hello()    
+        return self._fetch_hello() 
 
     def _ensure_valid(self):
         """
@@ -448,17 +413,20 @@ class ZattooTV(StreamerBase):
         "zpush_url": "https://zpush.zattoo.com/sse?public_id=xxx&client_id=xxx&mac=xxx",
         "service_country": "DE",
         "privacy_settings": []
-        }        
+        }
         """
         if self.account_info is None:
             print("No account info available, trying to boot ...")
             self.boot()
-        
+
         if self.account_info and len(self.account_info["permissions"]) > 0:
             return True
         return False
 
-    # --- 
+    # ---
+    #def boot(self):
+    #    return self.boot(login_flow=False)
+
     def boot(self, login_flow: bool = False):
         if not self._load_cookies() and not login_flow:
             self.print("No valid cookies found, run zattoo_login.py first.")
@@ -502,64 +470,27 @@ class ZattooTV(StreamerBase):
             return Response("Zattoo session invalid", status=503)
         proxy = self.get_proxy_base_url()
         lines = ["#EXTM3U"]
+
+        #for ch in self.channels:
         for ch in sorted(self.channels, key=lambda x: x.get("number", 99999)):
+            name = self._channel_title(ch)
+            logo = self._pick_logo(ch)
+            self.log(f"Processing channel '{name}' with CID '{ch.get('cid', 'unknown')}'")
             if ch.get("is_radio"):
+                self.log(f"RADIO CHANNEL SKIPPED")
                 continue
             if not self._is_channel_playable(ch):
+                self.log("CHANNEL ISNT PLAYABLE")
                 continue
             cid = ch.get("cid")
             if not cid:
+                self.log("CHANNEL HAS NO CID")
                 continue
-            name = self._channel_title(ch)
-            logo = self._pick_logo(ch)
+            self.log(json.dumps(ch, indent=2))
             lines.append(f"#EXTINF:-1 tvg-id=\"{_xe(cid, quote=True)}\" tvg-name=\"{_xe(name, quote=True)}\" tvg-logo=\"{_xe(logo, quote=True)}\" group-title=\"{self.provider_name}\",{_xe(name)}")
             ext = "ts" if self.ffmpeg else "m3u8"
             lines.append(f"{proxy}/live/{cid}.{ext}")
-        return Response("\n".join(lines), mimetype="audio/x-mpegurl")
-
-    """
-    def playlist_m3u_kodi(self) -> str:
-        if not self.channels and not self.boot():
-            return Response("Zattoo session invalid", status=503)
-
-        proxy = self.get_proxy_base_url()
-        lines = ["#EXTM3U"]
-
-        for ch in sorted(self.channels, key=lambda x: x.get("number", 99999)):
-            if ch.get("is_radio"):
-                continue
-            if not self._is_channel_playable(ch):
-                continue
-
-            cid = ch.get("cid")
-            if not cid:
-                continue
-
-            name = self._channel_title(ch)
-            logo = self._pick_logo(ch)
-            lines.append(
-                f"#EXTINF:-1 tvg-id=\"{_xe(cid, quote=True)}\" tvg-name=\"{_xe(name, quote=True)}\" tvg-logo=\"{_xe(logo, quote=True)}\" group-title=\"ZattooTV\",{_xe(name)}"
-            )
-
-            dash = self._resolve_live_dash_widevine(ch, requested_channel_id=cid)
-            if dash and dash.get("mpd_url") and dash.get("license_url"):
-                license_key = (
-                    f"{dash['license_url']}|"
-                    f"User-Agent={ZATTOOTV_USERAGENT}&Origin=https://zattoo.com&Referer=https://zattoo.com/|"
-                    f"R{{SSM}}|"
-                )
-                lines.append("#KODIPROP:inputstream=inputstream.adaptive")
-                lines.append("#KODIPROP:inputstream.adaptive.manifest_type=mpd")
-                lines.append("#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha")
-                lines.append(f"#KODIPROP:inputstream.adaptive.license_key={license_key}")
-                lines.append(dash["mpd_url"])
-
-            lines.append("#KODIPROP:inputstream=inputstream.adaptive")
-            lines.append("#KODIPROP:inputstream.adaptive.manifest_type=hls")
-            lines.append(f"{proxy}/live/{cid}.m3u8")
-
-        return Response("\n".join(lines), mimetype="audio/x-mpegurl")
-    """
+        return "\n".join(lines)
 
     def _playlist_m3u_kodi(self) -> str:
         if not self.channels and not self._ensure_valid():
@@ -568,6 +499,7 @@ class ZattooTV(StreamerBase):
         proxy = self.get_proxy_base_url()
         lines = ["#EXTM3U"]
 
+        #for ch in self.channels:
         for ch in sorted(self.channels, key=lambda x: x.get("number", 99999)):
             if ch.get("is_radio"):
                 continue
@@ -580,6 +512,9 @@ class ZattooTV(StreamerBase):
 
             name = self._channel_title(ch)
             logo = self._pick_logo(ch)
+            
+            self.log(f"Kodi playlist processing channel: cid={cid} name={name} drm={any(q.get('drm_required') for q in ch.get('qualities', []))}")
+
             lines.append(
                 f"#EXTINF:-1 tvg-id=\"{_xe(cid, quote=True)}\" tvg-name=\"{_xe(name, quote=True)}\" tvg-logo=\"{_xe(logo, quote=True)}\" group-title=\"ZattooTV\",{_xe(name)}"
             )
@@ -592,7 +527,7 @@ class ZattooTV(StreamerBase):
             try_dash = any(
                 isinstance(q, dict)
                 and bool(q.get("drm_required"))
-                and str(q.get("availability", "")).lower() in ("available", "subscribable")
+                and str(q.get("availability", "")).lower() in ("available") #, "subscribable")
                 for q in qualities
             )
             self.log(
@@ -601,7 +536,7 @@ class ZattooTV(StreamerBase):
             )
 
             if try_dash:
-                dash = self._resolve_live_dash_widevine(ch, requested_channel_id=cid, timeout_seconds=2.5)
+                dash = self._resolve_live_dash_widevine(ch, requested_channel_id=cid, timeout_seconds=5.0)
             else:
                 dash = None
 
@@ -617,9 +552,9 @@ class ZattooTV(StreamerBase):
                 lines.append("#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha")
                 lines.append(f"#KODIPROP:inputstream.adaptive.license_key={license_key}")
                 lines.append(dash["mpd_url"])
-            elif try_dash:
-                self.log(f"Kodi playlist DASH required but unresolved: cid={cid}; channel skipped")
-                continue
+            #elif try_dash:
+            #    self.log(f"Kodi playlist DASH required but unresolved: cid={cid}; channel skipped")
+            #    continue
             else:
                 self.log(f"Kodi playlist HLS fallback selected: cid={cid}")
                 lines.append("#KODIPROP:inputstream=inputstream.adaptive")

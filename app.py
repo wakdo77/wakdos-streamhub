@@ -5,7 +5,7 @@ import lib.streamers.factory as factory
 from lib.streamers.factory import all_streamer_classes, get_streamer, all_streamer_instances
 
 # ─── Konfiguration ───────────────────────────────────────────────────────────
-__version__ = "0.8.0" # feat(zattoo): add zattootv provider with login and kodi DRM support, fixed ad-filler ts and fixed some variable naming for better clarity 
+__version__ = "0.8.1" # fix ZattooTV duplicate boot(), cleanup dead code, add debug logging
 
 
 # Flask-App initialisieren
